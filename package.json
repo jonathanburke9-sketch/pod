@@ -1,0 +1,13 @@
+{
+  "name": "pod-delivery-proof",
+  "version": "1.0.0",
+  "description": "Offline-first invoice proof of delivery app for delivery drivers",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
