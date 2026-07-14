@@ -2,7 +2,10 @@ const CACHE_NAME = 'pod-pulse-v1';
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/app.js',
+  '/admin.html',
+  '/css/styles.css',
+  '/js/app.js',
+  '/js/admin.js',
   '/manifest.json'
 ];
 

@@ -1,61 +1,138 @@
-const driverSelect = document.getElementById('driver');
+const driverBadge = document.getElementById('driverBadge');
+const setupDriver = document.getElementById('setupDriver');
+const driverPicker = document.getElementById('driverPicker');
+const bindDriverBtn = document.getElementById('bindDriverBtn');
 const invoiceNumberInput = document.getElementById('invoiceNumber');
 const paymentMethodSelect = document.getElementById('paymentMethod');
 const captureBtn = document.getElementById('captureBtn');
 const switchBtn = document.getElementById('switchBtn');
 const submitBtn = document.getElementById('submitBtn');
-const adminBtn = document.getElementById('adminBtn');
-const addDriverBtn = document.getElementById('addDriverBtn');
-const removeDriverBtn = document.getElementById('removeDriverBtn');
-const driverNameInput = document.getElementById('driverName');
+const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
 const canvas = document.getElementById('canvas');
 const imagePreview = document.getElementById('capturedImage');
 const statusEl = document.getElementById('status');
 const queueCount = document.getElementById('queueCount');
 const connectionState = document.getElementById('connectionState');
-const adminPanel = document.getElementById('adminPanel');
 
 let stream;
 let currentFacingMode = 'environment';
 let drivers = [];
 let pendingQueue = [];
 let capturedDataUrl = '';
+let boundDriverId = localStorage.getItem('pod-device-driver') || '';
+let settings = null;
 
-function loadDrivers() {
-  fetch('/api/drivers')
-    .then(res => res.json())
-    .then(items => {
-      drivers = items;
-      renderDrivers();
-    })
-    .catch(() => {
-      drivers = [{ id: 'driver-001', name: 'Ava', folder: 'Ava' }];
-      renderDrivers();
-    });
+function applyTheme(theme) {
+  const root = document.documentElement;
+  root.style.setProperty('--bg', theme.bg);
+  root.style.setProperty('--panel', theme.panel);
+  root.style.setProperty('--accent', theme.accent);
+  root.style.setProperty('--accent-2', theme.accent2);
+  root.style.setProperty('--text', theme.text);
+  root.style.setProperty('--muted', theme.muted);
+  root.style.setProperty('--border', theme.border);
+  root.style.setProperty('--form-bg', theme.formBg);
+  root.style.setProperty('--form-text', theme.formText);
+  root.style.setProperty('--secondary-button-bg', theme.secondaryButtonBg);
 }
 
-function renderDrivers() {
-  driverSelect.innerHTML = '';
+function applyUiSettings(ui) {
+  document.getElementById('appTitle').textContent = ui.appTitle;
+  document.getElementById('subtitle').textContent = ui.subtitle;
+  document.getElementById('badgeText').textContent = ui.badgeText;
+  document.getElementById('driverLabel').textContent = ui.driverLabel;
+  document.getElementById('driverBindLabel').textContent = ui.driverBindLabel;
+  document.getElementById('invoiceLabel').textContent = ui.invoiceLabel;
+  document.getElementById('paymentLabel').textContent = ui.paymentLabel;
+  invoiceNumberInput.placeholder = ui.invoicePlaceholder;
+  bindDriverBtn.textContent = ui.driverBindButton;
+  captureBtn.textContent = ui.captureButton;
+  switchBtn.textContent = ui.switchButton;
+  submitBtn.textContent = ui.saveQueueButton;
+  syncBtn.textContent = ui.syncNowButton;
+  statusEl.textContent = ui.statusReadyText;
+}
+
+function applyPaymentOptions(form) {
+  paymentMethodSelect.innerHTML = '';
+  form.paymentOptions.forEach(optionValue => {
+    const option = document.createElement('option');
+    option.value = optionValue;
+    option.textContent = optionValue;
+    paymentMethodSelect.appendChild(option);
+  });
+}
+
+async function loadSettings() {
+  const response = await fetch('/settings/app_settings.json');
+  settings = await response.json();
+  applyTheme(settings.theme);
+  applyUiSettings(settings.ui);
+  applyPaymentOptions(settings.form);
+}
+
+function getBoundDriver() {
+  return drivers.find(driver => driver.id === boundDriverId) || null;
+}
+
+function renderDriverOptions() {
+  driverPicker.innerHTML = '';
   drivers.forEach(driver => {
     const option = document.createElement('option');
     option.value = driver.id;
     option.textContent = driver.name;
-    driverSelect.appendChild(option);
+    driverPicker.appendChild(option);
   });
 
-  const savedDriverId = localStorage.getItem('pod-device-driver');
-  const fallback = drivers[0]?.id;
-  const selected = savedDriverId && drivers.some(driver => driver.id === savedDriverId) ? savedDriverId : fallback;
-  if (selected) {
-    driverSelect.value = selected;
+  if (boundDriverId && drivers.some(driver => driver.id === boundDriverId)) {
+    driverPicker.value = boundDriverId;
   }
 }
 
-function rememberDriverSelection() {
-  if (driverSelect.value) {
-    localStorage.setItem('pod-device-driver', driverSelect.value);
+function renderDriverState() {
+  const boundDriver = getBoundDriver();
+  if (boundDriver) {
+    driverBadge.textContent = boundDriver.name;
+    setupDriver.classList.add('hidden');
+  } else {
+    driverBadge.textContent = settings?.ui?.notLinkedLabel || 'Not linked yet';
+    setupDriver.classList.remove('hidden');
   }
+}
+
+function loadDrivers() {
+  return fetch('/api/drivers')
+    .then(res => res.json())
+    .then(items => {
+      drivers = items;
+      renderDriverOptions();
+      renderDriverState();
+    })
+    .catch(() => {
+      drivers = [{ id: 'driver-001', name: 'Ava', folder: 'Ava' }];
+      renderDriverOptions();
+      renderDriverState();
+    });
+}
+
+function bindDriverToDevice() {
+  const selectedDriverId = driverPicker.value;
+  if (!selectedDriverId) {
+    statusEl.textContent = 'Select a driver before locking this device.';
+    return;
+  }
+
+  if (boundDriverId) {
+    statusEl.textContent = 'This device is already linked to a driver.';
+    return;
+  }
+
+  boundDriverId = selectedDriverId;
+  localStorage.setItem('pod-device-driver', selectedDriverId);
+  renderDriverState();
+  const boundDriver = getBoundDriver();
+  statusEl.textContent = `Device linked to ${boundDriver ? boundDriver.name : 'driver'}.`;
 }
 
 async function startCamera() {
@@ -75,7 +152,9 @@ async function startCamera() {
 
 function toggleConnectionStatus() {
   const online = navigator.onLine;
-  connectionState.textContent = online ? 'Online' : 'Offline';
+  connectionState.textContent = online
+    ? (settings?.ui?.connectionOnline || 'Online')
+    : (settings?.ui?.connectionOffline || 'Offline');
 }
 
 function applyEdgeDetection() {
@@ -110,24 +189,34 @@ function fileNameFromEntry(entry) {
   return `${entry.invoiceNumber}-${stamp}-${entry.driverName}-${entry.paymentMethod}`.replace(/\s+/g, '-');
 }
 
+function refreshQueueCount() {
+  const queueLabel = settings?.ui?.queueLabel || 'pending';
+  queueCount.textContent = `${pendingQueue.length} ${queueLabel}`;
+}
+
 function loadQueue() {
   const raw = localStorage.getItem('pod-queue');
   pendingQueue = raw ? JSON.parse(raw) : [];
-  queueCount.textContent = `${pendingQueue.length} pending`;
+  refreshQueueCount();
 }
 
 function saveQueue() {
   localStorage.setItem('pod-queue', JSON.stringify(pendingQueue));
-  queueCount.textContent = `${pendingQueue.length} pending`;
+  refreshQueueCount();
 }
 
 function enqueueEntry() {
+  const selectedDriver = getBoundDriver();
+  if (!selectedDriver) {
+    statusEl.textContent = 'Link this device to a driver first.';
+    return;
+  }
+
   if (!capturedDataUrl || !invoiceNumberInput.value.trim()) {
     statusEl.textContent = 'Capture an invoice and add an invoice number before saving.';
     return;
   }
 
-  const selectedDriver = drivers.find(driver => driver.id === driverSelect.value) || drivers[0];
   const entry = {
     id: `${Date.now()}`,
     driverId: selectedDriver.id,
@@ -144,7 +233,7 @@ function enqueueEntry() {
   saveQueue();
   statusEl.textContent = `Saved offline as ${entry.filename}`;
   invoiceNumberInput.value = '';
-  paymentMethodSelect.value = 'Cash';
+  paymentMethodSelect.value = settings.form.paymentOptions[0];
   imagePreview.classList.add('hidden');
   capturedDataUrl = '';
 }
@@ -163,11 +252,10 @@ async function syncQueue() {
   const remaining = [];
   for (const item of pendingQueue) {
     try {
-      const payload = { ...item, imageData: item.imageData };
       const response = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(item)
       });
       if (!response.ok) throw new Error('sync failed');
     } catch (error) {
@@ -180,49 +268,14 @@ async function syncQueue() {
   statusEl.textContent = pendingQueue.length ? 'Some items need another sync attempt.' : 'All deliveries uploaded.';
 }
 
-function toggleAdmin() {
-  adminPanel.classList.toggle('hidden');
-}
-
-async function addDriver() {
-  const name = driverNameInput.value.trim();
-  if (!name) return;
-  const nextDrivers = [...drivers, { id: `driver-${Date.now()}`, name, folder: name }];
-  drivers = nextDrivers;
-  renderDrivers();
-  await fetch('/api/drivers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(nextDrivers)
-  });
-  driverNameInput.value = '';
-  statusEl.textContent = `${name} was added to the driver list.`;
-}
-
-async function removeDriver() {
-  const selectedId = driverSelect.value;
-  if (!selectedId) return;
-  const nextDrivers = drivers.filter(driver => driver.id !== selectedId);
-  drivers = nextDrivers;
-  renderDrivers();
-  await fetch('/api/drivers', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(nextDrivers)
-  });
-  statusEl.textContent = 'Selected driver removed.';
-}
-
 captureBtn.addEventListener('click', captureInvoice);
 switchBtn.addEventListener('click', async () => {
   currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
   await startCamera();
 });
-driverSelect.addEventListener('change', rememberDriverSelection);
+bindDriverBtn.addEventListener('click', bindDriverToDevice);
 submitBtn.addEventListener('click', enqueueEntry);
-adminBtn.addEventListener('click', toggleAdmin);
-addDriverBtn.addEventListener('click', addDriver);
-removeDriverBtn.addEventListener('click', removeDriver);
+syncBtn.addEventListener('click', syncQueue);
 window.addEventListener('online', () => { toggleConnectionStatus(); syncQueue(); });
 window.addEventListener('offline', toggleConnectionStatus);
 
@@ -233,9 +286,10 @@ if ('serviceWorker' in navigator) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await loadSettings();
   toggleConnectionStatus();
-  loadDrivers();
   loadQueue();
+  await loadDrivers();
   await startCamera();
   await syncQueue();
 });

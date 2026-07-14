@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Driver Admin</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="top-nav">
+        <a href="/index.html">Driver App</a>
+      </section>
+
+      <section class="hero">
+        <h1 id="adminTitle">Driver Admin</h1>
+        <p id="adminSubtitle">Manage driver names and folder mapping for OneDrive.</p>
+      </section>
+
+      <section class="card">
+        <div class="field">
+          <label id="adminKeyLabel" for="adminKey">Admin key</label>
+          <input id="adminKey" type="password" placeholder="Enter admin key" />
+        </div>
+        <p class="status" id="adminStatus">Load drivers to begin.</p>
+      </section>
+
+      <section class="card">
+        <table class="table" id="driversTable">
+          <thead>
+            <tr>
+              <th>Driver Name</th>
+              <th>OneDrive Folder</th>
+            </tr>
+          </thead>
+          <tbody id="driversBody"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <div class="grid">
+          <button id="addDriverBtn">Add Driver</button>
+          <button id="removeDriverBtn" class="secondary">Remove Selected</button>
+          <button id="saveDriversBtn">Save Drivers</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/js/admin.js"></script>
+  </body>
+</html>
