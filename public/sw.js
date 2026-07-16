@@ -6,6 +6,7 @@ const APP_SHELL = [
   '/css/styles.css',
   '/js/app.js',
   '/js/admin.js',
+  '/settings/app_settings.json',
   '/manifest.json'
 ];
 

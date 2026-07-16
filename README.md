@@ -45,3 +45,65 @@ A compact installable proof-of-delivery app for delivery drivers.
 - Enter admin key.
 - Add, edit, or remove drivers and OneDrive folder names.
 - Click Save Drivers to commit changes via `/api/admin/drivers`.
+
+## OneDrive folder setup
+Use this setup so each driver has a dedicated OneDrive destination folder.
+
+1. In OneDrive, create a root folder named `POD_Uploads`.
+2. Create one subfolder per driver, for example:
+   - `POD_Uploads/Ava`
+   - `POD_Uploads/Jonathan`
+   - `POD_Uploads/Maria`
+3. In the admin page, set each driver's `OneDrive Folder` value to match the subfolder name exactly.
+4. Keep a consistent naming rule:
+   - Use plain names with no trailing spaces.
+   - Avoid duplicate folder names.
+5. Confirm the folder mapping by exporting driver data (or checking `data/drivers.json`) and verifying:
+   - `name` = display name in app
+   - `folder` = matching OneDrive subfolder name
+
+### Recommended permissions
+- Create a dedicated service account for app uploads.
+- Share `POD_Uploads` with this account as `Can edit`.
+- Keep drivers as `Can view` unless they must manage files.
+
+### Important
+- Current project stores the target folder name and upload records locally.
+- Direct upload to OneDrive API is not wired yet.
+- To enable real OneDrive upload, add a backend step that exchanges Microsoft OAuth token and uploads each file into `POD_Uploads/<driver-folder>/`.
+
+## Deploying the page
+Two common deployment options are below.
+
+### Option A: Full app deployment (recommended)
+Use this if you need driver/admin pages plus API endpoints.
+
+1. Push this repo to GitHub.
+2. Deploy to a Node host (Render, Railway, Azure App Service, Fly.io, or similar).
+3. Configure environment variables:
+   - `PORT` provided by host
+   - `ADMIN_KEY` set to a strong secret
+4. Start command:
+   - `node server.js`
+5. Verify after deploy:
+   - `/index.html` loads driver app
+   - `/admin.html` loads admin app
+   - `/settings/app_settings.json` loads settings JSON
+6. PWA check on mobile:
+   - Open deployed URL in browser
+   - Add to Home Screen
+   - Confirm offline launch works
+
+### Option B: Page-only static deployment
+Use this only for UI demo (no backend save/admin API behavior).
+
+1. Deploy `public/` to static hosting (GitHub Pages, Netlify static, Azure Static Web Apps).
+2. Also publish `settings/app_settings.json` under `/settings/app_settings.json`.
+3. Note: API calls (`/api/*`) will fail unless you add a backend.
+
+## Production checklist
+- Replace `data/*.json` local files with a real database/storage.
+- Add HTTPS-only deployment.
+- Add rate limiting for `/api/admin/drivers` and `/api/upload`.
+- Add authentication for admin page route, not only API key header.
+- Add OneDrive API integration and retry queue for failed uploads.

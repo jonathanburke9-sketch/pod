@@ -3,6 +3,7 @@ const setupDriver = document.getElementById('setupDriver');
 const driverPicker = document.getElementById('driverPicker');
 const bindDriverBtn = document.getElementById('bindDriverBtn');
 const invoiceNumberInput = document.getElementById('invoiceNumber');
+const invoiceHint = document.getElementById('invoiceHint');
 const paymentMethodSelect = document.getElementById('paymentMethod');
 const captureBtn = document.getElementById('captureBtn');
 const switchBtn = document.getElementById('switchBtn');
@@ -14,14 +15,34 @@ const imagePreview = document.getElementById('capturedImage');
 const statusEl = document.getElementById('status');
 const queueCount = document.getElementById('queueCount');
 const connectionState = document.getElementById('connectionState');
+const healthTitle = document.getElementById('healthTitle');
+const healthPendingLabel = document.getElementById('healthPendingLabel');
+const healthLastSyncLabel = document.getElementById('healthLastSyncLabel');
+const healthFailedLabel = document.getElementById('healthFailedLabel');
+const healthPendingValue = document.getElementById('healthPendingValue');
+const healthLastSyncValue = document.getElementById('healthLastSyncValue');
+const healthFailedValue = document.getElementById('healthFailedValue');
 
 let stream;
 let currentFacingMode = 'environment';
 let drivers = [];
 let pendingQueue = [];
 let capturedDataUrl = '';
+let captureQualityWarnings = [];
 let boundDriverId = localStorage.getItem('pod-device-driver') || '';
 let settings = null;
+let invoiceRegex = /^INV-\d{4}$/i;
+let health = {
+  failedUploads: 0,
+  lastSyncAt: ''
+};
+
+function getActiveTheme(settingsObj) {
+  const presetKey = settingsObj.activeThemePreset;
+  const preset = settingsObj.themePresets && settingsObj.themePresets[presetKey];
+  if (preset) return preset;
+  return settingsObj.theme || settingsObj.themePresets?.ocean || {};
+}
 
 function applyTheme(theme) {
   const root = document.documentElement;
@@ -45,6 +66,7 @@ function applyUiSettings(ui) {
   document.getElementById('driverBindLabel').textContent = ui.driverBindLabel;
   document.getElementById('invoiceLabel').textContent = ui.invoiceLabel;
   document.getElementById('paymentLabel').textContent = ui.paymentLabel;
+  invoiceHint.textContent = ui.invoicePatternHint || 'Format: INV-####';
   invoiceNumberInput.placeholder = ui.invoicePlaceholder;
   bindDriverBtn.textContent = ui.driverBindButton;
   captureBtn.textContent = ui.captureButton;
@@ -52,6 +74,10 @@ function applyUiSettings(ui) {
   submitBtn.textContent = ui.saveQueueButton;
   syncBtn.textContent = ui.syncNowButton;
   statusEl.textContent = ui.statusReadyText;
+  healthTitle.textContent = ui.healthTitle || 'Upload Health';
+  healthPendingLabel.textContent = ui.healthPendingLabel || 'Pending';
+  healthLastSyncLabel.textContent = ui.healthLastSyncLabel || 'Last Sync';
+  healthFailedLabel.textContent = ui.healthFailedLabel || 'Failed Uploads';
 }
 
 function applyPaymentOptions(form) {
@@ -64,12 +90,43 @@ function applyPaymentOptions(form) {
   });
 }
 
+function setupValidation(form) {
+  try {
+    invoiceRegex = new RegExp(form.invoicePattern || '^INV-\\d{4}$', form.invoicePatternFlags || 'i');
+  } catch (error) {
+    invoiceRegex = /^INV-\d{4}$/i;
+  }
+}
+
+function loadHealth() {
+  const raw = localStorage.getItem('pod-health');
+  health = raw ? JSON.parse(raw) : { failedUploads: 0, lastSyncAt: '' };
+}
+
+function saveHealth() {
+  localStorage.setItem('pod-health', JSON.stringify(health));
+}
+
+function formatSyncTime(isoText) {
+  if (!isoText) return settings?.ui?.healthNeverLabel || 'Never';
+  const date = new Date(isoText);
+  if (Number.isNaN(date.getTime())) return settings?.ui?.healthNeverLabel || 'Never';
+  return date.toLocaleString();
+}
+
+function refreshHealthPanel() {
+  healthPendingValue.textContent = String(pendingQueue.length);
+  healthFailedValue.textContent = String(health.failedUploads || 0);
+  healthLastSyncValue.textContent = formatSyncTime(health.lastSyncAt || '');
+}
+
 async function loadSettings() {
   const response = await fetch('/settings/app_settings.json');
   settings = await response.json();
-  applyTheme(settings.theme);
+  applyTheme(getActiveTheme(settings));
   applyUiSettings(settings.ui);
   applyPaymentOptions(settings.form);
+  setupValidation(settings.form);
 }
 
 function getBoundDriver() {
@@ -144,7 +201,7 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
     video.srcObject = stream;
     await video.play();
-    statusEl.textContent = 'Camera ready. Frame the invoice and capture.';
+    statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
   } catch (error) {
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
   }
@@ -157,14 +214,69 @@ function toggleConnectionStatus() {
     : (settings?.ui?.connectionOffline || 'Offline');
 }
 
-function applyEdgeDetection() {
+function computeBrightnessAndSharpness(imageData) {
+  const { data, width, height } = imageData;
+  let brightnessSum = 0;
+  let edgeDiffSum = 0;
+  let edgeSamples = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 4;
+      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      brightnessSum += gray;
+
+      if (x < width - 1) {
+        const j = (y * width + (x + 1)) * 4;
+        const grayRight = (data[j] + data[j + 1] + data[j + 2]) / 3;
+        edgeDiffSum += Math.abs(gray - grayRight);
+        edgeSamples += 1;
+      }
+      if (y < height - 1) {
+        const k = ((y + 1) * width + x) * 4;
+        const grayDown = (data[k] + data[k + 1] + data[k + 2]) / 3;
+        edgeDiffSum += Math.abs(gray - grayDown);
+        edgeSamples += 1;
+      }
+    }
+  }
+
+  const pixels = width * height;
+  const averageBrightness = pixels ? brightnessSum / pixels : 0;
+  const sharpnessScore = edgeSamples ? edgeDiffSum / edgeSamples : 0;
+  return { averageBrightness, sharpnessScore };
+}
+
+function evaluateImageQuality(imageData) {
+  const result = [];
+  const metrics = computeBrightnessAndSharpness(imageData);
+  const minBrightness = settings?.form?.minBrightness ?? 55;
+  const maxBrightness = settings?.form?.maxBrightness ?? 220;
+  const minSharpness = settings?.form?.minSharpness ?? 12;
+
+  if (metrics.averageBrightness < minBrightness) {
+    result.push('Image is dark. Try better light before saving.');
+  }
+  if (metrics.averageBrightness > maxBrightness) {
+    result.push('Image is too bright. Avoid glare on the invoice.');
+  }
+  if (metrics.sharpnessScore < minSharpness) {
+    result.push('Image may be blurry. Hold steady and recapture if possible.');
+  }
+
+  return result;
+}
+
+function applyEdgeDetectionFromCurrentFrame() {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
+  const originalImageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  captureQualityWarnings = evaluateImageQuality(originalImageData);
+
+  const data = originalImageData.data;
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
     const threshold = gray > 140 ? 255 : 0;
@@ -172,15 +284,20 @@ function applyEdgeDetection() {
     data[i + 1] = threshold;
     data[i + 2] = threshold;
   }
-  context.putImageData(imageData, 0, 0);
+
+  context.putImageData(originalImageData, 0, 0);
   return canvas.toDataURL('image/jpeg', 0.92);
 }
 
 function captureInvoice() {
-  capturedDataUrl = applyEdgeDetection();
+  capturedDataUrl = applyEdgeDetectionFromCurrentFrame();
   imagePreview.src = capturedDataUrl;
   imagePreview.classList.remove('hidden');
-  statusEl.textContent = 'Invoice captured. Review and save it to the queue.';
+  if (captureQualityWarnings.length) {
+    statusEl.textContent = `Invoice captured with warning: ${captureQualityWarnings.join(' ')}`;
+  } else {
+    statusEl.textContent = 'Invoice captured. Review and save it to the queue.';
+  }
 }
 
 function fileNameFromEntry(entry) {
@@ -198,11 +315,17 @@ function loadQueue() {
   const raw = localStorage.getItem('pod-queue');
   pendingQueue = raw ? JSON.parse(raw) : [];
   refreshQueueCount();
+  refreshHealthPanel();
 }
 
 function saveQueue() {
   localStorage.setItem('pod-queue', JSON.stringify(pendingQueue));
   refreshQueueCount();
+  refreshHealthPanel();
+}
+
+function isInvoiceValid(invoiceNumber) {
+  return invoiceRegex.test(invoiceNumber);
 }
 
 function enqueueEntry() {
@@ -217,39 +340,59 @@ function enqueueEntry() {
     return;
   }
 
+  const invoiceNumber = invoiceNumberInput.value.trim().toUpperCase();
+  if (!isInvoiceValid(invoiceNumber)) {
+    statusEl.textContent = `Invoice number must match ${settings?.ui?.invoicePatternHint || 'INV-####'}.`;
+    return;
+  }
+
   const entry = {
     id: `${Date.now()}`,
     driverId: selectedDriver.id,
     driverName: selectedDriver.name,
     folder: selectedDriver.folder || selectedDriver.name,
-    invoiceNumber: invoiceNumberInput.value.trim(),
+    invoiceNumber,
     paymentMethod: paymentMethodSelect.value,
     imageData: capturedDataUrl,
+    qualityWarnings: captureQualityWarnings,
     timestamp: new Date().toISOString(),
     filename: ''
   };
   entry.filename = fileNameFromEntry(entry);
   pendingQueue.push(entry);
   saveQueue();
-  statusEl.textContent = `Saved offline as ${entry.filename}`;
+
+  if (captureQualityWarnings.length) {
+    statusEl.textContent = `Saved with image warning. ${captureQualityWarnings.join(' ')} File: ${entry.filename}`;
+  } else {
+    statusEl.textContent = `Saved offline as ${entry.filename}`;
+  }
+
   invoiceNumberInput.value = '';
   paymentMethodSelect.value = settings.form.paymentOptions[0];
   imagePreview.classList.add('hidden');
   capturedDataUrl = '';
+  captureQualityWarnings = [];
 }
 
 async function syncQueue() {
   if (!navigator.onLine) {
     statusEl.textContent = 'Offline. New deliveries remain safe in the queue.';
+    refreshHealthPanel();
     return;
   }
 
   if (!pendingQueue.length) {
+    health.lastSyncAt = new Date().toISOString();
+    saveHealth();
+    refreshHealthPanel();
     statusEl.textContent = 'Queue is empty.';
     return;
   }
 
   const remaining = [];
+  let failedThisRun = 0;
+
   for (const item of pendingQueue) {
     try {
       const response = await fetch('/api/upload', {
@@ -260,12 +403,19 @@ async function syncQueue() {
       if (!response.ok) throw new Error('sync failed');
     } catch (error) {
       remaining.push(item);
+      failedThisRun += 1;
     }
   }
 
   pendingQueue = remaining;
+  health.failedUploads = (health.failedUploads || 0) + failedThisRun;
+  health.lastSyncAt = new Date().toISOString();
+  saveHealth();
   saveQueue();
-  statusEl.textContent = pendingQueue.length ? 'Some items need another sync attempt.' : 'All deliveries uploaded.';
+
+  statusEl.textContent = pendingQueue.length
+    ? 'Some items need another sync attempt.'
+    : 'All deliveries uploaded.';
 }
 
 captureBtn.addEventListener('click', captureInvoice);
@@ -287,8 +437,10 @@ if ('serviceWorker' in navigator) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
+  loadHealth();
   toggleConnectionStatus();
   loadQueue();
+  refreshHealthPanel();
   await loadDrivers();
   await startCamera();
   await syncQueue();

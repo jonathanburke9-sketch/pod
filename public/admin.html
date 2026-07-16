@@ -26,6 +26,18 @@
       </section>
 
       <section class="card">
+        <div class="admin-toolbar">
+          <input id="driverSearch" placeholder="Search by driver or folder" />
+          <select id="sortOrder">
+            <option value="name-asc">Name A-Z</option>
+            <option value="name-desc">Name Z-A</option>
+            <option value="folder-asc">Folder A-Z</option>
+            <option value="folder-desc">Folder Z-A</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="card">
         <table class="table" id="driversTable">
           <thead>
             <tr>
