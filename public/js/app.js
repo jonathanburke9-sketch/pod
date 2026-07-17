@@ -40,6 +40,61 @@ let health = {
   failedUploads: 0,
   lastSyncAt: ''
 };
+const queueDbName = 'pod-offline-db';
+const queueStoreName = 'queue';
+const queueDbVersion = 1;
+
+function openQueueDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error('IndexedDB not supported'));
+      return;
+    }
+
+    const request = indexedDB.open(queueDbName, queueDbVersion);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(queueStoreName)) {
+        db.createObjectStore(queueStoreName, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Failed to open IndexedDB'));
+  });
+}
+
+async function readAllQueueFromDb() {
+  const db = await openQueueDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(queueStoreName, 'readonly');
+    const store = tx.objectStore(queueStoreName);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error || new Error('Failed to read queue records'));
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => db.close();
+  });
+}
+
+async function writeAllQueueToDb(items) {
+  const db = await openQueueDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(queueStoreName, 'readwrite');
+    const store = tx.objectStore(queueStoreName);
+    store.clear();
+    items.forEach(item => store.put(item));
+
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error || new Error('Failed to write queue records'));
+    };
+  });
+}
 
 function getActiveTheme(settingsObj) {
   const presetKey = settingsObj.activeThemePreset;
@@ -527,15 +582,33 @@ function refreshQueueCount() {
   queueCount.textContent = `${pendingQueue.length} ${queueLabel}`;
 }
 
-function loadQueue() {
-  const raw = localStorage.getItem('pod-queue');
-  pendingQueue = raw ? JSON.parse(raw) : [];
+async function loadQueue() {
+  try {
+    pendingQueue = await readAllQueueFromDb();
+    const legacyRaw = localStorage.getItem('pod-queue');
+    if (!pendingQueue.length && legacyRaw) {
+      const legacyItems = JSON.parse(legacyRaw);
+      if (Array.isArray(legacyItems) && legacyItems.length) {
+        pendingQueue = legacyItems;
+        await writeAllQueueToDb(legacyItems);
+      }
+      localStorage.removeItem('pod-queue');
+    }
+  } catch (error) {
+    const raw = localStorage.getItem('pod-queue');
+    pendingQueue = raw ? JSON.parse(raw) : [];
+  }
   refreshQueueCount();
   refreshHealthPanel();
 }
 
-function saveQueue() {
-  localStorage.setItem('pod-queue', JSON.stringify(pendingQueue));
+async function saveQueue() {
+  try {
+    await writeAllQueueToDb(pendingQueue);
+  } catch (error) {
+    // Fallback for browsers where IndexedDB is unavailable or blocked.
+    localStorage.setItem('pod-queue', JSON.stringify(pendingQueue));
+  }
   refreshQueueCount();
   refreshHealthPanel();
 }
@@ -544,7 +617,7 @@ function isInvoiceValid(invoiceNumber) {
   return invoiceRegex.test(invoiceNumber);
 }
 
-function enqueueEntry() {
+async function enqueueEntry() {
   const selectedDriver = getBoundDriver();
   if (!selectedDriver) {
     statusEl.textContent = 'Link this device to a driver first.';
@@ -590,7 +663,7 @@ function enqueueEntry() {
   };
   entry.filename = fileNameFromEntry(entry);
   pendingQueue.push(entry);
-  saveQueue();
+  await saveQueue();
 
   if (combinedWarnings.length) {
     statusEl.textContent = `Saved PDF with warning. ${combinedWarnings.join(' ')} File: ${entry.filename}`;
@@ -641,7 +714,7 @@ async function syncQueue() {
   health.failedUploads = (health.failedUploads || 0) + failedThisRun;
   health.lastSyncAt = new Date().toISOString();
   saveHealth();
-  saveQueue();
+  await saveQueue();
 
   statusEl.textContent = pendingQueue.length
     ? 'Some items need another sync attempt.'
@@ -671,7 +744,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   loadHealth();
   toggleConnectionStatus();
-  loadQueue();
+  await loadQueue();
   refreshScanSummary();
   refreshHealthPanel();
   await loadDrivers();
