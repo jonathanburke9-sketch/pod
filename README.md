@@ -2,12 +2,33 @@
 
 POD Pulse is a proof-of-delivery app for drivers. It lets you capture signed delivery documents with the phone camera, add invoice details and notes, save multiple scans as a single PDF, and keep records safely offline until you are ready to sync.
 
-## Quick Start
+## Installation
 1. Install Node.js 18 or later.
 2. Open a terminal in the project folder.
-3. Run `node server.js`.
-4. Open `http://localhost:3000` in your browser.
-5. Open `http://localhost:3000/admin.html` if you need to manage drivers.
+3. Run `npm install`.
+4. Confirm the app starts with `npm test` if you want to check the current code first.
+
+## Run Locally
+1. Start the app with `npm start`.
+2. Open `http://localhost:3000` in your browser.
+3. Open `http://localhost:3000/admin.html` if you need to manage drivers.
+
+## Deployment
+This project currently deploys as a simple Node app.
+
+### Local or Server Deployment Steps
+1. Copy the repository to the machine that will host the app.
+2. Install Node.js 18 or later on that machine.
+3. Run `npm install`.
+4. Set any required environment variables, such as `PORT` or `ADMIN_KEY`, if you want to override defaults.
+5. Start the server with `npm start`.
+6. Point your browser or reverse proxy to the running host and port.
+
+### Deployment Notes
+- Default port: `3000`
+- Main server entry point: `server.js`
+- Production data files live in `data/`
+- The app serves the driver UI from `public/`
 
 ## What You Can Do
 - Capture one or more invoice scans.
@@ -69,7 +90,7 @@ The app currently supports:
 Open the admin page if you need to manage driver names or folder mappings.
 
 1. Go to `http://localhost:3000/admin.html`.
-2. Enter the admin key.
+2. Enter the admin key if one is configured.
 3. Add, remove, or edit drivers.
 4. Save the driver list.
 
@@ -101,6 +122,11 @@ If you are preparing OneDrive folders for later upload use, follow this pattern:
 - `data/drivers.json` current driver data
 - `data/submissions.json` queued submission metadata
 - `server.js` local Node server
+
+## Useful Commands
+- `npm install` install dependencies
+- `npm start` start the app locally
+- `npm test` run the test suite
 
 ## Troubleshooting
 If the app does not work as expected:
