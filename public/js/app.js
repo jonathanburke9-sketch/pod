@@ -5,13 +5,18 @@ const bindDriverBtn = document.getElementById('bindDriverBtn');
 const invoiceNumberInput = document.getElementById('invoiceNumber');
 const invoiceHint = document.getElementById('invoiceHint');
 const paymentMethodSelect = document.getElementById('paymentMethod');
+const notesInput = document.getElementById('notes');
 const captureBtn = document.getElementById('captureBtn');
+const removeScanBtn = document.getElementById('removeScanBtn');
+const clearScansBtn = document.getElementById('clearScansBtn');
 const switchBtn = document.getElementById('switchBtn');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
 const canvas = document.getElementById('canvas');
 const imagePreview = document.getElementById('capturedImage');
+const scanSummary = document.getElementById('scanSummary');
+const scanList = document.getElementById('scanList');
 const statusEl = document.getElementById('status');
 const queueCount = document.getElementById('queueCount');
 const connectionState = document.getElementById('connectionState');
@@ -27,8 +32,7 @@ let stream;
 let currentFacingMode = 'environment';
 let drivers = [];
 let pendingQueue = [];
-let capturedDataUrl = '';
-let captureQualityWarnings = [];
+let capturedScans = [];
 let boundDriverId = localStorage.getItem('pod-device-driver') || '';
 let settings = null;
 let invoiceRegex = /^INV-\d{4}$/i;
@@ -66,10 +70,14 @@ function applyUiSettings(ui) {
   document.getElementById('driverBindLabel').textContent = ui.driverBindLabel;
   document.getElementById('invoiceLabel').textContent = ui.invoiceLabel;
   document.getElementById('paymentLabel').textContent = ui.paymentLabel;
+  document.getElementById('notesLabel').textContent = ui.notesLabel || 'Notes';
   invoiceHint.textContent = ui.invoicePatternHint || 'Format: INV-####';
   invoiceNumberInput.placeholder = ui.invoicePlaceholder;
+  notesInput.placeholder = ui.notesPlaceholder || 'Optional notes for this POD submission';
   bindDriverBtn.textContent = ui.driverBindButton;
   captureBtn.textContent = ui.captureButton;
+  removeScanBtn.textContent = ui.removeScanButton || 'Remove last scan';
+  clearScansBtn.textContent = ui.clearScansButton || 'Clear scans';
   switchBtn.textContent = ui.switchButton;
   submitBtn.textContent = ui.saveQueueButton;
   syncBtn.textContent = ui.syncNowButton;
@@ -167,7 +175,13 @@ function loadDrivers() {
       renderDriverState();
     })
     .catch(() => {
-      drivers = [{ id: 'driver-001', name: 'Ava', folder: 'Ava' }];
+      drivers = [
+        { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin' },
+        { id: 'driver-002', name: 'Deon', folder: 'Deon' },
+        { id: 'driver-003', name: 'Themba', folder: 'Themba' },
+        { id: 'driver-004', name: 'Janine', folder: 'Janine' },
+        { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
+      ];
       renderDriverOptions();
       renderDriverState();
     });
@@ -267,6 +281,25 @@ function evaluateImageQuality(imageData) {
   return result;
 }
 
+function refreshScanSummary() {
+  const count = capturedScans.length;
+  scanSummary.textContent = `${count} scan${count === 1 ? '' : 's'} captured`;
+  scanList.innerHTML = '';
+
+  capturedScans.forEach((scan, index) => {
+    const pill = document.createElement('span');
+    pill.className = 'scan-pill';
+    const warningText = scan.qualityWarnings.length ? ' (warning)' : '';
+    pill.textContent = `Scan ${index + 1}${warningText}`;
+    scanList.appendChild(pill);
+  });
+
+  if (!count) {
+    imagePreview.classList.add('hidden');
+    imagePreview.removeAttribute('src');
+  }
+}
+
 function applyEdgeDetectionFromCurrentFrame() {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
@@ -274,7 +307,7 @@ function applyEdgeDetectionFromCurrentFrame() {
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   const originalImageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  captureQualityWarnings = evaluateImageQuality(originalImageData);
+  const qualityWarnings = evaluateImageQuality(originalImageData);
 
   const data = originalImageData.data;
   for (let i = 0; i < data.length; i += 4) {
@@ -286,24 +319,207 @@ function applyEdgeDetectionFromCurrentFrame() {
   }
 
   context.putImageData(originalImageData, 0, 0);
-  return canvas.toDataURL('image/jpeg', 0.92);
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', 0.92),
+    qualityWarnings
+  };
 }
 
 function captureInvoice() {
-  capturedDataUrl = applyEdgeDetectionFromCurrentFrame();
-  imagePreview.src = capturedDataUrl;
+  const result = applyEdgeDetectionFromCurrentFrame();
+  capturedScans.push(result);
+  imagePreview.src = result.dataUrl;
   imagePreview.classList.remove('hidden');
-  if (captureQualityWarnings.length) {
-    statusEl.textContent = `Invoice captured with warning: ${captureQualityWarnings.join(' ')}`;
+  refreshScanSummary();
+
+  if (result.qualityWarnings.length) {
+    statusEl.textContent = `Scan captured with warning: ${result.qualityWarnings.join(' ')}`;
   } else {
-    statusEl.textContent = 'Invoice captured. Review and save it to the queue.';
+    statusEl.textContent = 'Scan captured. Add more scans if needed, then save to the queue as a PDF.';
   }
+}
+
+function removeLastScan() {
+  if (!capturedScans.length) {
+    statusEl.textContent = 'No scans to remove.';
+    return;
+  }
+
+  capturedScans.pop();
+  if (capturedScans.length) {
+    imagePreview.src = capturedScans[capturedScans.length - 1].dataUrl;
+    imagePreview.classList.remove('hidden');
+  }
+  refreshScanSummary();
+  statusEl.textContent = 'Removed the most recent scan.';
+}
+
+function clearScans() {
+  capturedScans = [];
+  refreshScanSummary();
+  statusEl.textContent = 'Cleared all captured scans.';
+}
+
+function dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function jpegDimensions(bytes) {
+  if (bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
+    throw new Error('Invalid JPEG scan');
+  }
+
+  let offset = 2;
+  while (offset < bytes.length) {
+    if (bytes[offset] !== 0xFF) {
+      offset += 1;
+      continue;
+    }
+
+    let marker = bytes[offset + 1];
+    while (marker === 0xFF) {
+      offset += 1;
+      marker = bytes[offset + 1];
+    }
+
+    const length = (bytes[offset + 2] << 8) + bytes[offset + 3];
+    if (!length || offset + 2 + length > bytes.length) {
+      break;
+    }
+
+    const isSof = (marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7)
+      || (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF);
+    if (isSof) {
+      const height = (bytes[offset + 5] << 8) + bytes[offset + 6];
+      const width = (bytes[offset + 7] << 8) + bytes[offset + 8];
+      return { width, height };
+    }
+
+    offset += 2 + length;
+  }
+
+  throw new Error('Unable to determine JPEG dimensions');
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function createPdfDataUrl(scans) {
+  const encoder = new TextEncoder();
+  const objects = [];
+
+  const pageCount = scans.length;
+  const catalogObjId = 1;
+  const pagesObjId = 2;
+  let nextObjId = 3;
+  const pageObjectIds = [];
+
+  scans.forEach(scan => {
+    const jpegBytes = dataUrlToBytes(scan.dataUrl);
+    const dimensions = jpegDimensions(jpegBytes);
+    const pageObjId = nextObjId;
+    const contentObjId = nextObjId + 1;
+    const imageObjId = nextObjId + 2;
+    nextObjId += 3;
+
+    pageObjectIds.push(pageObjId);
+
+    const width = Math.max(dimensions.width, 1);
+    const height = Math.max(dimensions.height, 1);
+    const contentText = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ\n`;
+
+    objects[pageObjId] = {
+      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im1 ${imageObjId} 0 R >> >> /Contents ${contentObjId} 0 R >>`
+    };
+
+    objects[contentObjId] = {
+      text: `<< /Length ${contentText.length} >>\nstream\n${contentText}endstream`
+    };
+
+    const header = encoder.encode(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+    const footer = encoder.encode('\nendstream');
+    const streamBytes = new Uint8Array(header.length + jpegBytes.length + footer.length);
+    streamBytes.set(header, 0);
+    streamBytes.set(jpegBytes, header.length);
+    streamBytes.set(footer, header.length + jpegBytes.length);
+    objects[imageObjId] = { bytes: streamBytes };
+  });
+
+  objects[catalogObjId] = { text: `<< /Type /Catalog /Pages ${pagesObjId} 0 R >>` };
+  const kids = pageObjectIds.map(id => `${id} 0 R`).join(' ');
+  objects[pagesObjId] = { text: `<< /Type /Pages /Count ${pageCount} /Kids [ ${kids} ] >>` };
+
+  const chunks = [];
+  const offsets = [];
+  let currentOffset = 0;
+
+  function pushText(text) {
+    const bytes = encoder.encode(text);
+    chunks.push(bytes);
+    currentOffset += bytes.length;
+  }
+
+  function pushBytes(bytes) {
+    chunks.push(bytes);
+    currentOffset += bytes.length;
+  }
+
+  pushText('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+
+  for (let objId = 1; objId < objects.length; objId += 1) {
+    const obj = objects[objId];
+    if (!obj) continue;
+    offsets[objId] = currentOffset;
+    pushText(`${objId} 0 obj\n`);
+    if (obj.bytes) {
+      pushBytes(obj.bytes);
+      pushText('\n');
+    } else {
+      pushText(`${obj.text}\n`);
+    }
+    pushText('endobj\n');
+  }
+
+  const xrefOffset = currentOffset;
+  const totalObjects = objects.length;
+  pushText(`xref\n0 ${totalObjects}\n`);
+  pushText('0000000000 65535 f \n');
+
+  for (let objId = 1; objId < totalObjects; objId += 1) {
+    const offset = offsets[objId] || 0;
+    pushText(`${String(offset).padStart(10, '0')} 00000 n \n`);
+  }
+
+  pushText(`trailer\n<< /Size ${totalObjects} /Root ${catalogObjId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const output = new Uint8Array(totalLength);
+  let pos = 0;
+  chunks.forEach(chunk => {
+    output.set(chunk, pos);
+    pos += chunk.length;
+  });
+
+  return `data:application/pdf;base64,${bytesToBase64(output)}`;
 }
 
 function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
   const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
-  return `${entry.invoiceNumber}-${stamp}-${entry.driverName}-${entry.paymentMethod}`.replace(/\s+/g, '-');
+  return `${entry.invoiceNumber}-${stamp}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
 function refreshQueueCount() {
@@ -335,8 +551,8 @@ function enqueueEntry() {
     return;
   }
 
-  if (!capturedDataUrl || !invoiceNumberInput.value.trim()) {
-    statusEl.textContent = 'Capture an invoice and add an invoice number before saving.';
+  if (!capturedScans.length || !invoiceNumberInput.value.trim()) {
+    statusEl.textContent = 'Capture at least one scan and add an invoice number before saving.';
     return;
   }
 
@@ -346,6 +562,17 @@ function enqueueEntry() {
     return;
   }
 
+  let pdfDataUrl = '';
+  try {
+    pdfDataUrl = createPdfDataUrl(capturedScans);
+  } catch (error) {
+    statusEl.textContent = 'Unable to generate a PDF from captured scans. Please recapture and try again.';
+    return;
+  }
+
+  const combinedWarnings = [...new Set(capturedScans.flatMap(scan => scan.qualityWarnings))];
+  const notes = notesInput.value.trim();
+
   const entry = {
     id: `${Date.now()}`,
     driverId: selectedDriver.id,
@@ -353,8 +580,11 @@ function enqueueEntry() {
     folder: selectedDriver.folder || selectedDriver.name,
     invoiceNumber,
     paymentMethod: paymentMethodSelect.value,
-    imageData: capturedDataUrl,
-    qualityWarnings: captureQualityWarnings,
+    notes,
+    scanCount: capturedScans.length,
+    documentMimeType: 'application/pdf',
+    imageData: pdfDataUrl,
+    qualityWarnings: combinedWarnings,
     timestamp: new Date().toISOString(),
     filename: ''
   };
@@ -362,17 +592,17 @@ function enqueueEntry() {
   pendingQueue.push(entry);
   saveQueue();
 
-  if (captureQualityWarnings.length) {
-    statusEl.textContent = `Saved with image warning. ${captureQualityWarnings.join(' ')} File: ${entry.filename}`;
+  if (combinedWarnings.length) {
+    statusEl.textContent = `Saved PDF with warning. ${combinedWarnings.join(' ')} File: ${entry.filename}`;
   } else {
-    statusEl.textContent = `Saved offline as ${entry.filename}`;
+    statusEl.textContent = `Saved offline as PDF: ${entry.filename}`;
   }
 
   invoiceNumberInput.value = '';
+  notesInput.value = '';
   paymentMethodSelect.value = settings.form.paymentOptions[0];
-  imagePreview.classList.add('hidden');
-  capturedDataUrl = '';
-  captureQualityWarnings = [];
+  capturedScans = [];
+  refreshScanSummary();
 }
 
 async function syncQueue() {
@@ -419,6 +649,8 @@ async function syncQueue() {
 }
 
 captureBtn.addEventListener('click', captureInvoice);
+removeScanBtn.addEventListener('click', removeLastScan);
+clearScansBtn.addEventListener('click', clearScans);
 switchBtn.addEventListener('click', async () => {
   currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
   await startCamera();
@@ -440,6 +672,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadHealth();
   toggleConnectionStatus();
   loadQueue();
+  refreshScanSummary();
   refreshHealthPanel();
   await loadDrivers();
   await startCamera();
