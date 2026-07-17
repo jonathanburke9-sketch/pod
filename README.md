@@ -30,6 +30,46 @@ This project currently deploys as a simple Node app.
 - Production data files live in `data/`
 - The app serves the driver UI from `public/`
 
+## Device Deployment
+Use these steps when you want to put the app onto driver devices such as phones or tablets.
+
+### Before You Roll Out
+1. Host the app on a machine or server that drivers can reach over the network.
+2. Use a stable URL that stays the same for all devices.
+3. Make sure the site is available over HTTPS in production.
+4. Confirm the server is running and the driver list loads correctly.
+5. Decide whether the admin page will be available only to supervisors.
+
+### Install on Each Device
+1. Open the app URL in the device browser.
+2. Allow camera access when prompted.
+3. If the browser offers it, install the app to the home screen.
+4. Open the installed app from the home screen icon.
+5. Link the device to the correct driver the first time it is used.
+
+### Device Setup Checklist
+1. Confirm the device has a working camera.
+2. Confirm the device has enough storage for queued PDFs.
+3. Confirm the date and time are correct on the device.
+4. Test one capture before going live.
+5. Test offline mode by turning off Wi-Fi or mobile data briefly.
+6. Confirm the queue count updates after saving.
+
+### Recommended Rollout Order
+1. Set up the server.
+2. Verify the driver list and admin page.
+3. Install the app on one test device.
+4. Bind the device to a driver.
+5. Capture and save one sample POD.
+6. Sync the queue.
+7. Repeat for the remaining devices.
+
+### Device Use Notes
+- The device stays linked to the first driver chosen on that device.
+- Users should enter invoice numbers as digits only.
+- The app adds the `INV-` prefix automatically.
+- Users can add notes and multiple scans before saving.
+
 ## What You Can Do
 - Capture one or more invoice scans.
 - Save each submission as a PDF.
