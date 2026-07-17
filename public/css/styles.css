@@ -128,6 +128,33 @@ button.secondary {
   font-size: 0.85rem;
 }
 
+.invoice-input-group {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--form-bg);
+}
+
+.invoice-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-right: 1px solid var(--border);
+}
+
+.invoice-input-group input {
+  border: 0;
+  border-radius: 0;
+  min-width: 0;
+}
+
 .scan-list {
   display: flex;
   flex-wrap: wrap;

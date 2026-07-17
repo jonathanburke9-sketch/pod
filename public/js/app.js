@@ -126,8 +126,8 @@ function applyUiSettings(ui) {
   document.getElementById('invoiceLabel').textContent = ui.invoiceLabel;
   document.getElementById('paymentLabel').textContent = ui.paymentLabel;
   document.getElementById('notesLabel').textContent = ui.notesLabel || 'Notes';
-  invoiceHint.textContent = ui.invoicePatternHint || 'Format: INV-####';
-  invoiceNumberInput.placeholder = ui.invoicePlaceholder;
+  invoiceHint.textContent = ui.invoicePatternHint || 'Numbers only. The INV- prefix is added automatically.';
+  invoiceNumberInput.placeholder = ui.invoicePlaceholder || '1042';
   notesInput.placeholder = ui.notesPlaceholder || 'Optional notes for this POD submission';
   bindDriverBtn.textContent = ui.driverBindButton;
   captureBtn.textContent = ui.captureButton;
@@ -155,9 +155,9 @@ function applyPaymentOptions(form) {
 
 function setupValidation(form) {
   try {
-    invoiceRegex = new RegExp(form.invoicePattern || '^INV-\\d{4}$', form.invoicePatternFlags || 'i');
+    invoiceRegex = new RegExp(form.invoicePattern || '^\\d+$', form.invoicePatternFlags || '');
   } catch (error) {
-    invoiceRegex = /^INV-\d{4}$/i;
+    invoiceRegex = /^\d+$/;
   }
 }
 
@@ -617,6 +617,10 @@ function isInvoiceValid(invoiceNumber) {
   return invoiceRegex.test(invoiceNumber);
 }
 
+function normalizeInvoiceNumber(rawValue) {
+  return rawValue.trim().replace(/^inv-?/i, '').replace(/\s+/g, '');
+}
+
 async function enqueueEntry() {
   const selectedDriver = getBoundDriver();
   if (!selectedDriver) {
@@ -629,11 +633,12 @@ async function enqueueEntry() {
     return;
   }
 
-  const invoiceNumber = invoiceNumberInput.value.trim().toUpperCase();
-  if (!isInvoiceValid(invoiceNumber)) {
-    statusEl.textContent = `Invoice number must match ${settings?.ui?.invoicePatternHint || 'INV-####'}.`;
+  const invoiceDigits = normalizeInvoiceNumber(invoiceNumberInput.value);
+  if (!isInvoiceValid(invoiceDigits)) {
+    statusEl.textContent = 'Invoice number must contain digits only.';
     return;
   }
+  const invoiceNumber = `INV-${invoiceDigits}`;
 
   let pdfDataUrl = '';
   try {

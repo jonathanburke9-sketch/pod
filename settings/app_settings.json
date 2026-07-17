@@ -7,7 +7,7 @@
     "driverBindLabel": "Select driver once",
     "driverBindButton": "Lock driver to this device",
     "invoiceLabel": "Invoice number",
-    "invoicePlaceholder": "INV-1042",
+    "invoicePlaceholder": "1042",
     "paymentLabel": "Payment method",
     "notesLabel": "Notes",
     "notesPlaceholder": "Optional notes for this POD submission",
@@ -22,7 +22,7 @@
     "connectionOnline": "Online",
     "connectionOffline": "Offline",
     "notLinkedLabel": "Not linked yet",
-    "invoicePatternHint": "Format: INV-####",
+    "invoicePatternHint": "Numbers only. The INV- prefix is added automatically.",
     "healthTitle": "Upload Health",
     "healthPendingLabel": "Pending",
     "healthLastSyncLabel": "Last Sync",
@@ -30,8 +30,8 @@
     "healthNeverLabel": "Never"
   },
   "form": {
-    "invoicePattern": "^INV-\\d{4}$",
-    "invoicePatternFlags": "i",
+    "invoicePattern": "^\\d+$",
+    "invoicePatternFlags": "",
     "minBrightness": 55,
     "maxBrightness": 220,
     "minSharpness": 12,

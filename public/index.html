@@ -33,8 +33,11 @@
             </div>
             <div class="field" style="margin-top:12px;">
               <label id="invoiceLabel" for="invoiceNumber">Invoice number</label>
-              <input id="invoiceNumber" placeholder="INV-1042" />
-              <small id="invoiceHint" class="hint">Format: INV-####</small>
+              <div class="invoice-input-group">
+                <span class="invoice-prefix">INV-</span>
+                <input id="invoiceNumber" inputmode="numeric" placeholder="1042" />
+              </div>
+              <small id="invoiceHint" class="hint">Numbers only. The INV- prefix is added automatically.</small>
             </div>
             <div class="field" style="margin-top:12px;">
               <label id="paymentLabel" for="paymentMethod">Payment method</label>
