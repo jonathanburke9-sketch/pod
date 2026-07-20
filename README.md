@@ -55,6 +55,9 @@ ADMIN_KEY=replace_with_strong_admin_key
 SUPABASE_URL=https://your-project-ref.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 SUPABASE_ANON_KEY=your_anon_key
+
+ONEDRIVE_ROOT=C:\\Users\\<your-user>\\OneDrive
+ONEDRIVE_POD_ROOT=POD_Uploads
 ```
 
 Notes:
@@ -62,6 +65,8 @@ Notes:
 - `SUPABASE_SERVICE_ROLE_KEY` must only be used on the server.
 - Never expose service role keys to browser code.
 - Keep `.env` out of source control.
+- `ONEDRIVE_ROOT` must point to the local synced OneDrive base folder on the server machine.
+- `ONEDRIVE_POD_ROOT` defaults to `POD_Uploads` if omitted.
 
 ## Supabase Project Setup (Detailed)
 
@@ -170,27 +175,45 @@ Recommended object path format:
 
 `POD_Uploads/<driver-folder>/<invoice-number>/<timestamp>.pdf`
 
-## Wiring This Codebase to Supabase
+## Supabase Wiring Status
 
-`lib/supabase.js` is already present and creates a Supabase client from env vars.
+`lib/supabase.js` is active and `server.js` now uses Supabase when env vars are present.
 
-To fully switch from local JSON to Supabase, update `server.js` API handlers:
+Current behavior:
 
 1. `GET /api/drivers`
 
-- Replace file read with `select id, name, folder from drivers where active = true`.
+- Reads drivers from Supabase first.
+- Falls back to `data/drivers.json` if Supabase is unavailable.
 
 2. `POST /api/admin/drivers`
 
-- Validate admin key.
-- Upsert rows into `drivers`.
+- Validates admin key.
+- Saves sanitized list to local file.
+- Attempts Supabase upsert.
 
 3. `POST /api/upload`
 
-- Insert payload into `pod_submissions`.
-- Optionally store generated PDF in `pod-files` and save URL/path.
+- Resolves mapped folder from driver mapping.
+- Writes PDF from `payload.imageData` to OneDrive path (if configured).
+- Inserts into `pod_submissions` in Supabase (if configured).
+- Falls back to `data/submissions.json` when Supabase is unavailable.
 
-Migration strategy:
+Upload response now includes storage result and OneDrive result:
+
+```json
+{
+	"ok": true,
+	"storage": "supabase",
+	"oneDrive": {
+		"saved": true,
+		"relativePath": "POD_Uploads/Deon/2026/07/INV-1042_20260720-142213.pdf",
+		"absoluteFilePath": "C:\\Users\\ops\\OneDrive\\POD_Uploads\\Deon\\2026\\07\\INV-1042_20260720-142213.pdf"
+	}
+}
+```
+
+Fallback strategy:
 
 1. Keep local file write as fallback.
 2. Try Supabase insert first.
@@ -226,6 +249,10 @@ Important rules:
 2. Create `POD_Uploads`.
 3. Create one subfolder per driver using exact mapping values.
 4. Confirm OneDrive status is green check (fully synced).
+5. Set `.env`:
+
+- `ONEDRIVE_ROOT` to your local OneDrive root path.
+- `ONEDRIVE_POD_ROOT` to your POD folder name (optional, defaults to `POD_Uploads`).
 
 ### Link Driver Mapping in Admin
 
@@ -258,6 +285,12 @@ Example:
 `POD_Uploads/Deon/2026/07/INV-1042_2026-07-20T14-22-13Z.pdf`
 
 This improves search, monthly audits, and recovery.
+
+Actual server output now follows this format:
+
+`<ONEDRIVE_POD_ROOT>/<driver-folder>/<YYYY>/<MM>/<filename>.pdf`
+
+Where `<filename>.pdf` comes from payload `filename` when available (sanitized), otherwise generated from invoice and UTC timestamp.
 
 ## Migration from Local Data
 
@@ -318,4 +351,6 @@ npm test
 
 1. Confirm driver folder mapping text matches exactly.
 2. Confirm OneDrive client is signed in and syncing.
+3. Confirm `ONEDRIVE_ROOT` is set and points to a real local folder.
+4. Check server response field `oneDrive.saved` and `oneDrive.reason`.
 3. Check folder permissions for service account/user.

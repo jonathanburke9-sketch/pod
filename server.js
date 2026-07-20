@@ -14,6 +14,8 @@ const submissionsFile = path.join(dataDir, 'submissions.json');
 const driversFile = path.join(dataDir, 'drivers.json');
 const adminKey = process.env.ADMIN_KEY || '';
 const hasSupabaseConfig = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
+const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT || 'POD_Uploads';
 
 let supabase = null;
 if (hasSupabaseConfig) {
@@ -162,7 +164,7 @@ async function writeSubmissionToSupabase(payload) {
     invoice_number: payload.invoiceNumber || '',
     payment_method: payload.paymentMethod || null,
     notes: payload.notes || null,
-    pod_pdf_url: null,
+    pod_pdf_url: payload.podPdfPath || null,
     status: 'uploaded',
     source_device: payload.sourceDevice || null,
     payload,
@@ -180,21 +182,97 @@ async function writeSubmissionToSupabase(payload) {
   return true;
 }
 
+async function getDriversWithFallback() {
+  try {
+    const supabaseDrivers = await getDriversFromSupabase();
+    if (supabaseDrivers && supabaseDrivers.length) {
+      return supabaseDrivers;
+    }
+  } catch (error) {
+    console.error('Failed to read drivers from Supabase. Using local fallback.', error.message);
+  }
+
+  return readJsonFile(driversFile, fallbackDrivers);
+}
+
+function safePathSegment(value) {
+  const text = String(value || '').trim();
+  if (!text) return 'unknown';
+  return text
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/\.+$/g, '')
+    .trim();
+}
+
+function sanitizeFileName(value) {
+  const cleaned = safePathSegment(value || 'pod-document.pdf');
+  if (cleaned.toLowerCase().endsWith('.pdf')) return cleaned;
+  return `${cleaned}.pdf`;
+}
+
+function dataUrlPdfToBuffer(dataUrl) {
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:application/pdf;base64,')) {
+    return null;
+  }
+
+  const base64 = dataUrl.split(',')[1] || '';
+  if (!base64) return null;
+  return Buffer.from(base64, 'base64');
+}
+
+function buildTimestampParts(isoTimestamp) {
+  const date = isoTimestamp ? new Date(isoTimestamp) : new Date();
+  const isValid = !Number.isNaN(date.getTime());
+  const d = isValid ? date : new Date();
+  const year = String(d.getUTCFullYear());
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const stamp = `${year}${month}${String(d.getUTCDate()).padStart(2, '0')}-${String(d.getUTCHours()).padStart(2, '0')}${String(d.getUTCMinutes()).padStart(2, '0')}${String(d.getUTCSeconds()).padStart(2, '0')}`;
+  return { year, month, stamp };
+}
+
+function writePdfToOneDrive(payload, mappedFolder) {
+  if (!oneDriveRoot) {
+    return { saved: false, reason: 'ONEDRIVE_ROOT is not configured' };
+  }
+
+  const pdfBuffer = dataUrlPdfToBuffer(payload.imageData);
+  if (!pdfBuffer) {
+    return { saved: false, reason: 'No PDF data URL was provided in payload.imageData' };
+  }
+
+  const folderSegment = safePathSegment(mappedFolder || payload.folder || payload.driverName || 'Unmapped');
+  const invoiceSegment = safePathSegment(payload.invoiceNumber || 'INV-unknown');
+  const timeParts = buildTimestampParts(payload.timestamp);
+  const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
+  const fileName = sanitizeFileName(payload.filename || fallbackFileName);
+
+  const absoluteDir = path.join(oneDriveRoot, oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month);
+  fs.mkdirSync(absoluteDir, { recursive: true });
+
+  const absoluteFilePath = path.join(absoluteDir, fileName);
+  fs.writeFileSync(absoluteFilePath, pdfBuffer);
+
+  const relativePath = [
+    oneDrivePodRoot,
+    folderSegment,
+    timeParts.year,
+    timeParts.month,
+    fileName
+  ].join('/');
+
+  return {
+    saved: true,
+    relativePath,
+    absoluteFilePath
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   if (req.method === 'GET' && url.pathname === '/api/drivers') {
-    let drivers = null;
-
-    try {
-      drivers = await getDriversFromSupabase();
-    } catch (error) {
-      console.error('Failed to read drivers from Supabase. Using local fallback.', error.message);
-    }
-
-    if (!drivers) {
-      drivers = readJsonFile(driversFile, fallbackDrivers);
-    }
+    const drivers = await getDriversWithFallback();
 
     sendJson(res, 200, drivers);
     return;
@@ -255,6 +333,27 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const drivers = await getDriversWithFallback();
+    const matchedDriver = drivers.find(driver => driver.id === payload.driverId);
+    const mappedFolder = (matchedDriver && matchedDriver.folder)
+      || payload.folder
+      || payload.driverFolder
+      || payload.driverName
+      || 'Unmapped';
+
+    payload.folder = mappedFolder;
+
+    let oneDrive = { saved: false, reason: 'Not attempted' };
+    try {
+      oneDrive = writePdfToOneDrive(payload, mappedFolder);
+      if (oneDrive.saved) {
+        payload.podPdfPath = oneDrive.relativePath;
+      }
+    } catch (error) {
+      oneDrive = { saved: false, reason: error.message || 'OneDrive write failed' };
+      console.error('OneDrive mapping write failed.', oneDrive.reason);
+    }
+
     let storage = 'local';
     if (supabase) {
       try {
@@ -272,7 +371,11 @@ const server = http.createServer(async (req, res) => {
       storage = 'local';
     }
 
-    sendJson(res, 200, { ok: true, storage });
+    sendJson(res, 200, {
+      ok: true,
+      storage,
+      oneDrive
+    });
     return;
   }
 
