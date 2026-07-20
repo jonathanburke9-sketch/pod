@@ -7,36 +7,78 @@
     "driverBindLabel": "Select driver once",
     "driverBindButton": "Lock driver to this device",
     "invoiceLabel": "Invoice number",
-    "invoicePlaceholder": "INV-1042",
+    "invoicePlaceholder": "1042",
     "paymentLabel": "Payment method",
+    "notesLabel": "Notes",
+    "notesPlaceholder": "Optional notes for this POD submission",
     "statusReadyText": "Ready to capture a signed invoice.",
-    "captureButton": "Capture invoice",
+    "captureButton": "Capture scan",
+    "removeScanButton": "Remove last scan",
+    "clearScansButton": "Clear scans",
     "switchButton": "Switch camera",
     "saveQueueButton": "Save to offline queue",
     "syncNowButton": "Sync now",
     "queueLabel": "pending",
     "connectionOnline": "Online",
     "connectionOffline": "Offline",
-    "notLinkedLabel": "Not linked yet"
+    "notLinkedLabel": "Not linked yet",
+    "invoicePatternHint": "Numbers only. The INV- prefix is added automatically.",
+    "healthTitle": "Upload Health",
+    "healthPendingLabel": "Pending",
+    "healthLastSyncLabel": "Last Sync",
+    "healthFailedLabel": "Failed Uploads",
+    "healthNeverLabel": "Never"
   },
   "form": {
+    "invoicePattern": "^\\d+$",
+    "invoicePatternFlags": "",
+    "minBrightness": 55,
+    "maxBrightness": 220,
+    "minSharpness": 12,
     "paymentOptions": [
-      "Cash",
       "EFT",
+      "Cash",
       "S2S"
     ]
   },
-  "theme": {
-    "bg": "#060816",
-    "panel": "rgba(15, 23, 42, 0.92)",
-    "accent": "#0ea5e9",
-    "accent2": "#22d3ee",
-    "text": "#f8fafc",
-    "muted": "#94a3b8",
-    "border": "rgba(148, 163, 184, 0.2)",
-    "formBg": "#0f172a",
-    "formText": "#f8fafc",
-    "secondaryButtonBg": "#111827"
+  "activeThemePreset": "ocean",
+  "themePresets": {
+    "ocean": {
+      "bg": "#060816",
+      "panel": "rgba(15, 23, 42, 0.92)",
+      "accent": "#0ea5e9",
+      "accent2": "#22d3ee",
+      "text": "#f8fafc",
+      "muted": "#94a3b8",
+      "border": "rgba(148, 163, 184, 0.2)",
+      "formBg": "#0f172a",
+      "formText": "#f8fafc",
+      "secondaryButtonBg": "#111827"
+    },
+    "sunset": {
+      "bg": "#1f0b09",
+      "panel": "rgba(54, 19, 14, 0.9)",
+      "accent": "#fb923c",
+      "accent2": "#f43f5e",
+      "text": "#fff7ed",
+      "muted": "#fecaca",
+      "border": "rgba(251, 146, 60, 0.25)",
+      "formBg": "#2b130f",
+      "formText": "#fff7ed",
+      "secondaryButtonBg": "#3f1c16"
+    },
+    "highContrast": {
+      "bg": "#000000",
+      "panel": "rgba(10, 10, 10, 0.95)",
+      "accent": "#facc15",
+      "accent2": "#22d3ee",
+      "text": "#ffffff",
+      "muted": "#d4d4d8",
+      "border": "rgba(255, 255, 255, 0.35)",
+      "formBg": "#121212",
+      "formText": "#ffffff",
+      "secondaryButtonBg": "#1f2937"
+    }
   },
   "admin": {
     "title": "Driver Admin",
@@ -44,6 +86,12 @@
     "saveButton": "Save Drivers",
     "addButton": "Add Driver",
     "removeButton": "Remove Selected",
-    "authLabel": "Admin key"
+    "authLabel": "Admin key",
+    "searchPlaceholder": "Search by driver or folder",
+    "sortLabel": "Sort",
+    "sortNameAsc": "Name A-Z",
+    "sortNameDesc": "Name Z-A",
+    "sortFolderAsc": "Folder A-Z",
+    "sortFolderDesc": "Folder Z-A"
   }
 }

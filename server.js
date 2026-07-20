@@ -10,6 +10,14 @@ const submissionsFile = path.join(dataDir, 'submissions.json');
 const driversFile = path.join(dataDir, 'drivers.json');
 const adminKey = process.env.ADMIN_KEY || '';
 
+const fallbackDrivers = [
+  { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin' },
+  { id: 'driver-002', name: 'Deon', folder: 'Deon' },
+  { id: 'driver-003', name: 'Themba', folder: 'Themba' },
+  { id: 'driver-004', name: 'Janine', folder: 'Janine' },
+  { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
+];
+
 function ensureDataFiles() {
   fs.mkdirSync(dataDir, { recursive: true });
   if (!fs.existsSync(submissionsFile)) {
@@ -79,7 +87,7 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   if (req.method === 'GET' && url.pathname === '/api/drivers') {
-    const drivers = readJsonFile(driversFile, [{ id: 'driver-001', name: 'Ava', folder: 'Ava' }]);
+    const drivers = readJsonFile(driversFile, fallbackDrivers);
     sendJson(res, 200, drivers);
     return;
   }

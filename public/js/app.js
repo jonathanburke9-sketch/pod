@@ -3,25 +3,105 @@ const setupDriver = document.getElementById('setupDriver');
 const driverPicker = document.getElementById('driverPicker');
 const bindDriverBtn = document.getElementById('bindDriverBtn');
 const invoiceNumberInput = document.getElementById('invoiceNumber');
+const invoiceHint = document.getElementById('invoiceHint');
 const paymentMethodSelect = document.getElementById('paymentMethod');
+const notesInput = document.getElementById('notes');
 const captureBtn = document.getElementById('captureBtn');
+const removeScanBtn = document.getElementById('removeScanBtn');
+const clearScansBtn = document.getElementById('clearScansBtn');
 const switchBtn = document.getElementById('switchBtn');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
 const canvas = document.getElementById('canvas');
 const imagePreview = document.getElementById('capturedImage');
+const scanSummary = document.getElementById('scanSummary');
+const scanList = document.getElementById('scanList');
 const statusEl = document.getElementById('status');
 const queueCount = document.getElementById('queueCount');
 const connectionState = document.getElementById('connectionState');
+const healthTitle = document.getElementById('healthTitle');
+const healthPendingLabel = document.getElementById('healthPendingLabel');
+const healthLastSyncLabel = document.getElementById('healthLastSyncLabel');
+const healthFailedLabel = document.getElementById('healthFailedLabel');
+const healthPendingValue = document.getElementById('healthPendingValue');
+const healthLastSyncValue = document.getElementById('healthLastSyncValue');
+const healthFailedValue = document.getElementById('healthFailedValue');
 
 let stream;
 let currentFacingMode = 'environment';
 let drivers = [];
 let pendingQueue = [];
-let capturedDataUrl = '';
+let capturedScans = [];
 let boundDriverId = localStorage.getItem('pod-device-driver') || '';
 let settings = null;
+let invoiceRegex = /^INV-\d{4}$/i;
+let health = {
+  failedUploads: 0,
+  lastSyncAt: ''
+};
+const queueDbName = 'pod-offline-db';
+const queueStoreName = 'queue';
+const queueDbVersion = 1;
+
+function openQueueDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error('IndexedDB not supported'));
+      return;
+    }
+
+    const request = indexedDB.open(queueDbName, queueDbVersion);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(queueStoreName)) {
+        db.createObjectStore(queueStoreName, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('Failed to open IndexedDB'));
+  });
+}
+
+async function readAllQueueFromDb() {
+  const db = await openQueueDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(queueStoreName, 'readonly');
+    const store = tx.objectStore(queueStoreName);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error || new Error('Failed to read queue records'));
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => db.close();
+  });
+}
+
+async function writeAllQueueToDb(items) {
+  const db = await openQueueDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(queueStoreName, 'readwrite');
+    const store = tx.objectStore(queueStoreName);
+    store.clear();
+    items.forEach(item => store.put(item));
+
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error || new Error('Failed to write queue records'));
+    };
+  });
+}
+
+function getActiveTheme(settingsObj) {
+  const presetKey = settingsObj.activeThemePreset;
+  const preset = settingsObj.themePresets && settingsObj.themePresets[presetKey];
+  if (preset) return preset;
+  return settingsObj.theme || settingsObj.themePresets?.ocean || {};
+}
 
 function applyTheme(theme) {
   const root = document.documentElement;
@@ -45,13 +125,22 @@ function applyUiSettings(ui) {
   document.getElementById('driverBindLabel').textContent = ui.driverBindLabel;
   document.getElementById('invoiceLabel').textContent = ui.invoiceLabel;
   document.getElementById('paymentLabel').textContent = ui.paymentLabel;
-  invoiceNumberInput.placeholder = ui.invoicePlaceholder;
+  document.getElementById('notesLabel').textContent = ui.notesLabel || 'Notes';
+  invoiceHint.textContent = ui.invoicePatternHint || 'Numbers only. The INV- prefix is added automatically.';
+  invoiceNumberInput.placeholder = ui.invoicePlaceholder || '1042';
+  notesInput.placeholder = ui.notesPlaceholder || 'Optional notes for this POD submission';
   bindDriverBtn.textContent = ui.driverBindButton;
   captureBtn.textContent = ui.captureButton;
+  removeScanBtn.textContent = ui.removeScanButton || 'Remove last scan';
+  clearScansBtn.textContent = ui.clearScansButton || 'Clear scans';
   switchBtn.textContent = ui.switchButton;
   submitBtn.textContent = ui.saveQueueButton;
   syncBtn.textContent = ui.syncNowButton;
   statusEl.textContent = ui.statusReadyText;
+  healthTitle.textContent = ui.healthTitle || 'Upload Health';
+  healthPendingLabel.textContent = ui.healthPendingLabel || 'Pending';
+  healthLastSyncLabel.textContent = ui.healthLastSyncLabel || 'Last Sync';
+  healthFailedLabel.textContent = ui.healthFailedLabel || 'Failed Uploads';
 }
 
 function applyPaymentOptions(form) {
@@ -64,12 +153,43 @@ function applyPaymentOptions(form) {
   });
 }
 
+function setupValidation(form) {
+  try {
+    invoiceRegex = new RegExp(form.invoicePattern || '^\\d+$', form.invoicePatternFlags || '');
+  } catch (error) {
+    invoiceRegex = /^\d+$/;
+  }
+}
+
+function loadHealth() {
+  const raw = localStorage.getItem('pod-health');
+  health = raw ? JSON.parse(raw) : { failedUploads: 0, lastSyncAt: '' };
+}
+
+function saveHealth() {
+  localStorage.setItem('pod-health', JSON.stringify(health));
+}
+
+function formatSyncTime(isoText) {
+  if (!isoText) return settings?.ui?.healthNeverLabel || 'Never';
+  const date = new Date(isoText);
+  if (Number.isNaN(date.getTime())) return settings?.ui?.healthNeverLabel || 'Never';
+  return date.toLocaleString();
+}
+
+function refreshHealthPanel() {
+  healthPendingValue.textContent = String(pendingQueue.length);
+  healthFailedValue.textContent = String(health.failedUploads || 0);
+  healthLastSyncValue.textContent = formatSyncTime(health.lastSyncAt || '');
+}
+
 async function loadSettings() {
   const response = await fetch('/settings/app_settings.json');
   settings = await response.json();
-  applyTheme(settings.theme);
+  applyTheme(getActiveTheme(settings));
   applyUiSettings(settings.ui);
   applyPaymentOptions(settings.form);
+  setupValidation(settings.form);
 }
 
 function getBoundDriver() {
@@ -110,7 +230,13 @@ function loadDrivers() {
       renderDriverState();
     })
     .catch(() => {
-      drivers = [{ id: 'driver-001', name: 'Ava', folder: 'Ava' }];
+      drivers = [
+        { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin' },
+        { id: 'driver-002', name: 'Deon', folder: 'Deon' },
+        { id: 'driver-003', name: 'Themba', folder: 'Themba' },
+        { id: 'driver-004', name: 'Janine', folder: 'Janine' },
+        { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
+      ];
       renderDriverOptions();
       renderDriverState();
     });
@@ -144,7 +270,7 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
     video.srcObject = stream;
     await video.play();
-    statusEl.textContent = 'Camera ready. Frame the invoice and capture.';
+    statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
   } catch (error) {
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
   }
@@ -157,14 +283,88 @@ function toggleConnectionStatus() {
     : (settings?.ui?.connectionOffline || 'Offline');
 }
 
-function applyEdgeDetection() {
+function computeBrightnessAndSharpness(imageData) {
+  const { data, width, height } = imageData;
+  let brightnessSum = 0;
+  let edgeDiffSum = 0;
+  let edgeSamples = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = (y * width + x) * 4;
+      const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
+      brightnessSum += gray;
+
+      if (x < width - 1) {
+        const j = (y * width + (x + 1)) * 4;
+        const grayRight = (data[j] + data[j + 1] + data[j + 2]) / 3;
+        edgeDiffSum += Math.abs(gray - grayRight);
+        edgeSamples += 1;
+      }
+      if (y < height - 1) {
+        const k = ((y + 1) * width + x) * 4;
+        const grayDown = (data[k] + data[k + 1] + data[k + 2]) / 3;
+        edgeDiffSum += Math.abs(gray - grayDown);
+        edgeSamples += 1;
+      }
+    }
+  }
+
+  const pixels = width * height;
+  const averageBrightness = pixels ? brightnessSum / pixels : 0;
+  const sharpnessScore = edgeSamples ? edgeDiffSum / edgeSamples : 0;
+  return { averageBrightness, sharpnessScore };
+}
+
+function evaluateImageQuality(imageData) {
+  const result = [];
+  const metrics = computeBrightnessAndSharpness(imageData);
+  const minBrightness = settings?.form?.minBrightness ?? 55;
+  const maxBrightness = settings?.form?.maxBrightness ?? 220;
+  const minSharpness = settings?.form?.minSharpness ?? 12;
+
+  if (metrics.averageBrightness < minBrightness) {
+    result.push('Image is dark. Try better light before saving.');
+  }
+  if (metrics.averageBrightness > maxBrightness) {
+    result.push('Image is too bright. Avoid glare on the invoice.');
+  }
+  if (metrics.sharpnessScore < minSharpness) {
+    result.push('Image may be blurry. Hold steady and recapture if possible.');
+  }
+
+  return result;
+}
+
+function refreshScanSummary() {
+  const count = capturedScans.length;
+  scanSummary.textContent = `${count} scan${count === 1 ? '' : 's'} captured`;
+  scanList.innerHTML = '';
+
+  capturedScans.forEach((scan, index) => {
+    const pill = document.createElement('span');
+    pill.className = 'scan-pill';
+    const warningText = scan.qualityWarnings.length ? ' (warning)' : '';
+    pill.textContent = `Scan ${index + 1}${warningText}`;
+    scanList.appendChild(pill);
+  });
+
+  if (!count) {
+    imagePreview.classList.add('hidden');
+    imagePreview.removeAttribute('src');
+  }
+}
+
+function applyEdgeDetectionFromCurrentFrame() {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
+  const originalImageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const qualityWarnings = evaluateImageQuality(originalImageData);
+
+  const data = originalImageData.data;
   for (let i = 0; i < data.length; i += 4) {
     const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
     const threshold = gray > 140 ? 255 : 0;
@@ -172,21 +372,209 @@ function applyEdgeDetection() {
     data[i + 1] = threshold;
     data[i + 2] = threshold;
   }
-  context.putImageData(imageData, 0, 0);
-  return canvas.toDataURL('image/jpeg', 0.92);
+
+  context.putImageData(originalImageData, 0, 0);
+  return {
+    dataUrl: canvas.toDataURL('image/jpeg', 0.92),
+    qualityWarnings
+  };
 }
 
 function captureInvoice() {
-  capturedDataUrl = applyEdgeDetection();
-  imagePreview.src = capturedDataUrl;
+  const result = applyEdgeDetectionFromCurrentFrame();
+  capturedScans.push(result);
+  imagePreview.src = result.dataUrl;
   imagePreview.classList.remove('hidden');
-  statusEl.textContent = 'Invoice captured. Review and save it to the queue.';
+  refreshScanSummary();
+
+  if (result.qualityWarnings.length) {
+    statusEl.textContent = `Scan captured with warning: ${result.qualityWarnings.join(' ')}`;
+  } else {
+    statusEl.textContent = 'Scan captured. Add more scans if needed, then save to the queue as a PDF.';
+  }
+}
+
+function removeLastScan() {
+  if (!capturedScans.length) {
+    statusEl.textContent = 'No scans to remove.';
+    return;
+  }
+
+  capturedScans.pop();
+  if (capturedScans.length) {
+    imagePreview.src = capturedScans[capturedScans.length - 1].dataUrl;
+    imagePreview.classList.remove('hidden');
+  }
+  refreshScanSummary();
+  statusEl.textContent = 'Removed the most recent scan.';
+}
+
+function clearScans() {
+  capturedScans = [];
+  refreshScanSummary();
+  statusEl.textContent = 'Cleared all captured scans.';
+}
+
+function dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(',')[1] || '';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function jpegDimensions(bytes) {
+  if (bytes[0] !== 0xFF || bytes[1] !== 0xD8) {
+    throw new Error('Invalid JPEG scan');
+  }
+
+  let offset = 2;
+  while (offset < bytes.length) {
+    if (bytes[offset] !== 0xFF) {
+      offset += 1;
+      continue;
+    }
+
+    let marker = bytes[offset + 1];
+    while (marker === 0xFF) {
+      offset += 1;
+      marker = bytes[offset + 1];
+    }
+
+    const length = (bytes[offset + 2] << 8) + bytes[offset + 3];
+    if (!length || offset + 2 + length > bytes.length) {
+      break;
+    }
+
+    const isSof = (marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7)
+      || (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF);
+    if (isSof) {
+      const height = (bytes[offset + 5] << 8) + bytes[offset + 6];
+      const width = (bytes[offset + 7] << 8) + bytes[offset + 8];
+      return { width, height };
+    }
+
+    offset += 2 + length;
+  }
+
+  throw new Error('Unable to determine JPEG dimensions');
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function createPdfDataUrl(scans) {
+  const encoder = new TextEncoder();
+  const objects = [];
+
+  const pageCount = scans.length;
+  const catalogObjId = 1;
+  const pagesObjId = 2;
+  let nextObjId = 3;
+  const pageObjectIds = [];
+
+  scans.forEach(scan => {
+    const jpegBytes = dataUrlToBytes(scan.dataUrl);
+    const dimensions = jpegDimensions(jpegBytes);
+    const pageObjId = nextObjId;
+    const contentObjId = nextObjId + 1;
+    const imageObjId = nextObjId + 2;
+    nextObjId += 3;
+
+    pageObjectIds.push(pageObjId);
+
+    const width = Math.max(dimensions.width, 1);
+    const height = Math.max(dimensions.height, 1);
+    const contentText = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ\n`;
+
+    objects[pageObjId] = {
+      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im1 ${imageObjId} 0 R >> >> /Contents ${contentObjId} 0 R >>`
+    };
+
+    objects[contentObjId] = {
+      text: `<< /Length ${contentText.length} >>\nstream\n${contentText}endstream`
+    };
+
+    const header = encoder.encode(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+    const footer = encoder.encode('\nendstream');
+    const streamBytes = new Uint8Array(header.length + jpegBytes.length + footer.length);
+    streamBytes.set(header, 0);
+    streamBytes.set(jpegBytes, header.length);
+    streamBytes.set(footer, header.length + jpegBytes.length);
+    objects[imageObjId] = { bytes: streamBytes };
+  });
+
+  objects[catalogObjId] = { text: `<< /Type /Catalog /Pages ${pagesObjId} 0 R >>` };
+  const kids = pageObjectIds.map(id => `${id} 0 R`).join(' ');
+  objects[pagesObjId] = { text: `<< /Type /Pages /Count ${pageCount} /Kids [ ${kids} ] >>` };
+
+  const chunks = [];
+  const offsets = [];
+  let currentOffset = 0;
+
+  function pushText(text) {
+    const bytes = encoder.encode(text);
+    chunks.push(bytes);
+    currentOffset += bytes.length;
+  }
+
+  function pushBytes(bytes) {
+    chunks.push(bytes);
+    currentOffset += bytes.length;
+  }
+
+  pushText('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+
+  for (let objId = 1; objId < objects.length; objId += 1) {
+    const obj = objects[objId];
+    if (!obj) continue;
+    offsets[objId] = currentOffset;
+    pushText(`${objId} 0 obj\n`);
+    if (obj.bytes) {
+      pushBytes(obj.bytes);
+      pushText('\n');
+    } else {
+      pushText(`${obj.text}\n`);
+    }
+    pushText('endobj\n');
+  }
+
+  const xrefOffset = currentOffset;
+  const totalObjects = objects.length;
+  pushText(`xref\n0 ${totalObjects}\n`);
+  pushText('0000000000 65535 f \n');
+
+  for (let objId = 1; objId < totalObjects; objId += 1) {
+    const offset = offsets[objId] || 0;
+    pushText(`${String(offset).padStart(10, '0')} 00000 n \n`);
+  }
+
+  pushText(`trailer\n<< /Size ${totalObjects} /Root ${catalogObjId} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const output = new Uint8Array(totalLength);
+  let pos = 0;
+  chunks.forEach(chunk => {
+    output.set(chunk, pos);
+    pos += chunk.length;
+  });
+
+  return `data:application/pdf;base64,${bytesToBase64(output)}`;
 }
 
 function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
   const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
-  return `${entry.invoiceNumber}-${stamp}-${entry.driverName}-${entry.paymentMethod}`.replace(/\s+/g, '-');
+  return `${entry.invoiceNumber}-${stamp}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
 function refreshQueueCount() {
@@ -194,62 +582,125 @@ function refreshQueueCount() {
   queueCount.textContent = `${pendingQueue.length} ${queueLabel}`;
 }
 
-function loadQueue() {
-  const raw = localStorage.getItem('pod-queue');
-  pendingQueue = raw ? JSON.parse(raw) : [];
+async function loadQueue() {
+  try {
+    pendingQueue = await readAllQueueFromDb();
+    const legacyRaw = localStorage.getItem('pod-queue');
+    if (!pendingQueue.length && legacyRaw) {
+      const legacyItems = JSON.parse(legacyRaw);
+      if (Array.isArray(legacyItems) && legacyItems.length) {
+        pendingQueue = legacyItems;
+        await writeAllQueueToDb(legacyItems);
+      }
+      localStorage.removeItem('pod-queue');
+    }
+  } catch (error) {
+    const raw = localStorage.getItem('pod-queue');
+    pendingQueue = raw ? JSON.parse(raw) : [];
+  }
   refreshQueueCount();
+  refreshHealthPanel();
 }
 
-function saveQueue() {
-  localStorage.setItem('pod-queue', JSON.stringify(pendingQueue));
+async function saveQueue() {
+  try {
+    await writeAllQueueToDb(pendingQueue);
+  } catch (error) {
+    // Fallback for browsers where IndexedDB is unavailable or blocked.
+    localStorage.setItem('pod-queue', JSON.stringify(pendingQueue));
+  }
   refreshQueueCount();
+  refreshHealthPanel();
 }
 
-function enqueueEntry() {
+function isInvoiceValid(invoiceNumber) {
+  return invoiceRegex.test(invoiceNumber);
+}
+
+function normalizeInvoiceNumber(rawValue) {
+  return rawValue.trim().replace(/^inv-?/i, '').replace(/\s+/g, '');
+}
+
+async function enqueueEntry() {
   const selectedDriver = getBoundDriver();
   if (!selectedDriver) {
     statusEl.textContent = 'Link this device to a driver first.';
     return;
   }
 
-  if (!capturedDataUrl || !invoiceNumberInput.value.trim()) {
-    statusEl.textContent = 'Capture an invoice and add an invoice number before saving.';
+  if (!capturedScans.length || !invoiceNumberInput.value.trim()) {
+    statusEl.textContent = 'Capture at least one scan and add an invoice number before saving.';
     return;
   }
+
+  const invoiceDigits = normalizeInvoiceNumber(invoiceNumberInput.value);
+  if (!isInvoiceValid(invoiceDigits)) {
+    statusEl.textContent = 'Invoice number must contain digits only.';
+    return;
+  }
+  const invoiceNumber = `INV-${invoiceDigits}`;
+
+  let pdfDataUrl = '';
+  try {
+    pdfDataUrl = createPdfDataUrl(capturedScans);
+  } catch (error) {
+    statusEl.textContent = 'Unable to generate a PDF from captured scans. Please recapture and try again.';
+    return;
+  }
+
+  const combinedWarnings = [...new Set(capturedScans.flatMap(scan => scan.qualityWarnings))];
+  const notes = notesInput.value.trim();
 
   const entry = {
     id: `${Date.now()}`,
     driverId: selectedDriver.id,
     driverName: selectedDriver.name,
     folder: selectedDriver.folder || selectedDriver.name,
-    invoiceNumber: invoiceNumberInput.value.trim(),
+    invoiceNumber,
     paymentMethod: paymentMethodSelect.value,
-    imageData: capturedDataUrl,
+    notes,
+    scanCount: capturedScans.length,
+    documentMimeType: 'application/pdf',
+    imageData: pdfDataUrl,
+    qualityWarnings: combinedWarnings,
     timestamp: new Date().toISOString(),
     filename: ''
   };
   entry.filename = fileNameFromEntry(entry);
   pendingQueue.push(entry);
-  saveQueue();
-  statusEl.textContent = `Saved offline as ${entry.filename}`;
+  await saveQueue();
+
+  if (combinedWarnings.length) {
+    statusEl.textContent = `Saved PDF with warning. ${combinedWarnings.join(' ')} File: ${entry.filename}`;
+  } else {
+    statusEl.textContent = `Saved offline as PDF: ${entry.filename}`;
+  }
+
   invoiceNumberInput.value = '';
+  notesInput.value = '';
   paymentMethodSelect.value = settings.form.paymentOptions[0];
-  imagePreview.classList.add('hidden');
-  capturedDataUrl = '';
+  capturedScans = [];
+  refreshScanSummary();
 }
 
 async function syncQueue() {
   if (!navigator.onLine) {
     statusEl.textContent = 'Offline. New deliveries remain safe in the queue.';
+    refreshHealthPanel();
     return;
   }
 
   if (!pendingQueue.length) {
+    health.lastSyncAt = new Date().toISOString();
+    saveHealth();
+    refreshHealthPanel();
     statusEl.textContent = 'Queue is empty.';
     return;
   }
 
   const remaining = [];
+  let failedThisRun = 0;
+
   for (const item of pendingQueue) {
     try {
       const response = await fetch('/api/upload', {
@@ -260,15 +711,24 @@ async function syncQueue() {
       if (!response.ok) throw new Error('sync failed');
     } catch (error) {
       remaining.push(item);
+      failedThisRun += 1;
     }
   }
 
   pendingQueue = remaining;
-  saveQueue();
-  statusEl.textContent = pendingQueue.length ? 'Some items need another sync attempt.' : 'All deliveries uploaded.';
+  health.failedUploads = (health.failedUploads || 0) + failedThisRun;
+  health.lastSyncAt = new Date().toISOString();
+  saveHealth();
+  await saveQueue();
+
+  statusEl.textContent = pendingQueue.length
+    ? 'Some items need another sync attempt.'
+    : 'All deliveries uploaded.';
 }
 
 captureBtn.addEventListener('click', captureInvoice);
+removeScanBtn.addEventListener('click', removeLastScan);
+clearScansBtn.addEventListener('click', clearScans);
 switchBtn.addEventListener('click', async () => {
   currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
   await startCamera();
@@ -287,8 +747,11 @@ if ('serviceWorker' in navigator) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
+  loadHealth();
   toggleConnectionStatus();
-  loadQueue();
+  await loadQueue();
+  refreshScanSummary();
+  refreshHealthPanel();
   await loadDrivers();
   await startCamera();
   await syncQueue();

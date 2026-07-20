@@ -7,12 +7,22 @@ const driversBody = document.getElementById('driversBody');
 const addDriverBtn = document.getElementById('addDriverBtn');
 const removeDriverBtn = document.getElementById('removeDriverBtn');
 const saveDriversBtn = document.getElementById('saveDriversBtn');
+const driverSearch = document.getElementById('driverSearch');
+const sortOrder = document.getElementById('sortOrder');
 
+let settings = null;
 let drivers = [];
 let selectedDriverId = '';
 
 function randomId() {
   return `driver-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+function getActiveTheme(settingsObj) {
+  const presetKey = settingsObj.activeThemePreset;
+  const preset = settingsObj.themePresets && settingsObj.themePresets[presetKey];
+  if (preset) return preset;
+  return settingsObj.theme || settingsObj.themePresets?.ocean || {};
 }
 
 function applyTheme(theme) {
@@ -29,18 +39,61 @@ function applyTheme(theme) {
   root.style.setProperty('--secondary-button-bg', theme.secondaryButtonBg);
 }
 
-function applyAdminUi(settings) {
-  adminTitle.textContent = settings.admin.title;
-  adminSubtitle.textContent = settings.admin.subtitle;
-  adminKeyLabel.textContent = settings.admin.authLabel;
-  addDriverBtn.textContent = settings.admin.addButton;
-  removeDriverBtn.textContent = settings.admin.removeButton;
-  saveDriversBtn.textContent = settings.admin.saveButton;
+function applyAdminUi(settingsObj) {
+  const admin = settingsObj.admin;
+  adminTitle.textContent = admin.title;
+  adminSubtitle.textContent = admin.subtitle;
+  adminKeyLabel.textContent = admin.authLabel;
+  addDriverBtn.textContent = admin.addButton;
+  removeDriverBtn.textContent = admin.removeButton;
+  saveDriversBtn.textContent = admin.saveButton;
+
+  driverSearch.placeholder = admin.searchPlaceholder || 'Search by driver or folder';
+
+  sortOrder.innerHTML = '';
+  const options = [
+    { value: 'name-asc', label: admin.sortNameAsc || 'Name A-Z' },
+    { value: 'name-desc', label: admin.sortNameDesc || 'Name Z-A' },
+    { value: 'folder-asc', label: admin.sortFolderAsc || 'Folder A-Z' },
+    { value: 'folder-desc', label: admin.sortFolderDesc || 'Folder Z-A' }
+  ];
+  options.forEach(item => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    sortOrder.appendChild(option);
+  });
+}
+
+function getSortedAndFilteredDrivers() {
+  const query = driverSearch.value.trim().toLowerCase();
+  const filtered = drivers.filter(driver => {
+    const name = (driver.name || '').toLowerCase();
+    const folder = (driver.folder || '').toLowerCase();
+    return !query || name.includes(query) || folder.includes(query);
+  });
+
+  const order = sortOrder.value;
+  filtered.sort((a, b) => {
+    const nameA = (a.name || '').toLowerCase();
+    const nameB = (b.name || '').toLowerCase();
+    const folderA = (a.folder || '').toLowerCase();
+    const folderB = (b.folder || '').toLowerCase();
+
+    if (order === 'name-desc') return nameB.localeCompare(nameA);
+    if (order === 'folder-asc') return folderA.localeCompare(folderB);
+    if (order === 'folder-desc') return folderB.localeCompare(folderA);
+    return nameA.localeCompare(nameB);
+  });
+
+  return filtered;
 }
 
 function renderTable() {
+  const visibleDrivers = getSortedAndFilteredDrivers();
   driversBody.innerHTML = '';
-  drivers.forEach(driver => {
+
+  visibleDrivers.forEach(driver => {
     const row = document.createElement('tr');
     if (driver.id === selectedDriverId) {
       row.classList.add('selected');
@@ -79,8 +132,8 @@ function renderTable() {
 
 async function loadSettings() {
   const response = await fetch('/settings/app_settings.json');
-  const settings = await response.json();
-  applyTheme(settings.theme);
+  settings = await response.json();
+  applyTheme(getActiveTheme(settings));
   applyAdminUi(settings);
 }
 
@@ -142,6 +195,8 @@ async function saveDrivers() {
 addDriverBtn.addEventListener('click', addDriver);
 removeDriverBtn.addEventListener('click', removeDriver);
 saveDriversBtn.addEventListener('click', saveDrivers);
+driverSearch.addEventListener('input', renderTable);
+sortOrder.addEventListener('change', renderTable);
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();

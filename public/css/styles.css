@@ -123,6 +123,54 @@ button.secondary {
   font-size: 0.95rem;
 }
 
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.invoice-input-group {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--form-bg);
+}
+
+.invoice-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-right: 1px solid var(--border);
+}
+
+.invoice-input-group input {
+  border: 0;
+  border-radius: 0;
+  min-width: 0;
+}
+
+.scan-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.scan-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.18);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -136,6 +184,89 @@ button.secondary {
   background: #111827;
   color: #cbd5e1;
   font-size: 0.8rem;
+}
+
+.camera-wrap {
+  position: relative;
+}
+
+.capture-guide {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+}
+
+.corner {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+.corner.tl {
+  top: 10px;
+  left: 10px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.corner.tr {
+  top: 10px;
+  right: 10px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.corner.bl {
+  bottom: 10px;
+  left: 10px;
+  border-right: none;
+  border-top: none;
+}
+
+.corner.br {
+  bottom: 10px;
+  right: 10px;
+  border-left: none;
+  border-top: none;
+}
+
+.health-panel {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.health-panel h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.health-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px;
+  background: rgba(2, 6, 23, 0.5);
+}
+
+.health-item span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+}
+
+.health-item strong {
+  font-size: 0.92rem;
 }
 
 .hidden { display: none; }
@@ -169,6 +300,17 @@ button.secondary {
   padding: 8px 12px;
   border-radius: 12px;
   background: rgba(15, 23, 42, 0.7);
+}
+
+.admin-toolbar {
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 700px) {
+  .admin-toolbar {
+    grid-template-columns: 2fr 1fr;
+  }
 }
 
 @media (min-width: 700px) {

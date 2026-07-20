@@ -33,24 +33,61 @@
             </div>
             <div class="field" style="margin-top:12px;">
               <label id="invoiceLabel" for="invoiceNumber">Invoice number</label>
-              <input id="invoiceNumber" placeholder="INV-1042" />
+              <div class="invoice-input-group">
+                <span class="invoice-prefix">INV-</span>
+                <input id="invoiceNumber" inputmode="numeric" placeholder="1042" />
+              </div>
+              <small id="invoiceHint" class="hint">Numbers only. The INV- prefix is added automatically.</small>
             </div>
             <div class="field" style="margin-top:12px;">
               <label id="paymentLabel" for="paymentMethod">Payment method</label>
               <select id="paymentMethod"></select>
             </div>
+            <div class="field" style="margin-top:12px;">
+              <label id="notesLabel" for="notes">Notes</label>
+              <textarea id="notes" rows="3" placeholder="Optional notes for this POD submission"></textarea>
+            </div>
             <div class="chip-row">
               <span class="chip" id="queueCount">0 pending</span>
               <span class="chip" id="connectionState">Online</span>
             </div>
+            <section class="health-panel" aria-label="Upload health">
+              <h3 id="healthTitle">Upload Health</h3>
+              <div class="health-grid">
+                <div class="health-item">
+                  <span id="healthPendingLabel">Pending</span>
+                  <strong id="healthPendingValue">0</strong>
+                </div>
+                <div class="health-item">
+                  <span id="healthLastSyncLabel">Last Sync</span>
+                  <strong id="healthLastSyncValue">Never</strong>
+                </div>
+                <div class="health-item">
+                  <span id="healthFailedLabel">Failed Uploads</span>
+                  <strong id="healthFailedValue">0</strong>
+                </div>
+              </div>
+            </section>
           </div>
           <div>
-            <video id="cameraPreview" class="preview" autoplay playsinline muted></video>
+            <div class="camera-wrap">
+              <video id="cameraPreview" class="preview" autoplay playsinline muted></video>
+              <div class="capture-guide" aria-hidden="true">
+                <span class="corner tl"></span>
+                <span class="corner tr"></span>
+                <span class="corner bl"></span>
+                <span class="corner br"></span>
+              </div>
+            </div>
             <canvas id="canvas" class="hidden"></canvas>
             <div class="grid" style="margin-top:12px;">
-              <button id="captureBtn">Capture invoice</button>
+              <button id="captureBtn">Capture scan</button>
+              <button id="removeScanBtn" class="secondary">Remove last scan</button>
+              <button id="clearScansBtn" class="secondary">Clear scans</button>
               <button id="switchBtn" class="secondary">Switch camera</button>
             </div>
+            <p id="scanSummary" class="hint" style="margin-top:10px;">0 scans captured</p>
+            <div id="scanList" class="scan-list" aria-live="polite"></div>
             <img id="capturedImage" class="preview hidden" alt="Captured invoice" />
             <p class="status" id="status">Ready to capture a signed invoice.</p>
           </div>
