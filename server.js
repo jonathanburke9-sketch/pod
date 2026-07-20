@@ -1,8 +1,10 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const port = process.env.PORT || 3000;
+const host = process.env.HOST || '0.0.0.0';
 const publicDir = path.join(__dirname, 'public');
 const dataDir = path.join(__dirname, 'data');
 const settingsDir = path.join(__dirname, 'settings');
@@ -66,8 +68,18 @@ function readJsonFile(filePath, fallbackValue) {
 }
 
 function parseJsonBody(req, callback) {
+  const maxBodySize = 25 * 1024 * 1024;
+  let bodySize = 0;
   let body = '';
-  req.on('data', chunk => body += chunk);
+  req.on('data', chunk => {
+    bodySize += chunk.length;
+    if (bodySize > maxBodySize) {
+      callback(new Error('Payload too large'));
+      req.destroy();
+      return;
+    }
+    body += chunk;
+  });
   req.on('end', () => {
     try {
       const parsed = JSON.parse(body || '{}');
@@ -76,6 +88,7 @@ function parseJsonBody(req, callback) {
       callback(error);
     }
   });
+  req.on('error', error => callback(error));
 }
 
 function isAuthorizedAdmin(req) {
@@ -114,11 +127,16 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url.pathname === '/api/upload') {
     parseJsonBody(req, (error, payload) => {
       if (error) {
-        sendJson(res, 400, { error: 'Invalid JSON payload' });
+        const statusCode = error.message === 'Payload too large' ? 413 : 400;
+        sendJson(res, statusCode, {
+          error: error.message === 'Payload too large'
+            ? 'Upload payload too large. Capture fewer pages or try lower resolution.'
+            : 'Invalid JSON payload'
+        });
         return;
       }
 
-      const existing = JSON.parse(fs.readFileSync(submissionsFile, 'utf8'));
+      const existing = readJsonFile(submissionsFile, []);
       existing.push(payload);
       fs.writeFileSync(submissionsFile, JSON.stringify(existing, null, 2));
       sendJson(res, 200, { ok: true });
@@ -138,6 +156,14 @@ const server = http.createServer((req, res) => {
   sendFile(res, filePath);
 });
 
-server.listen(port, () => {
+server.listen(port, host, () => {
+  const networkInterfaces = os.networkInterfaces();
+  const lanAddress = Object.values(networkInterfaces)
+    .flat()
+    .find(net => net && net.family === 'IPv4' && !net.internal)?.address;
+
   console.log(`POD app running on http://localhost:${port}`);
+  if (lanAddress) {
+    console.log(`LAN access: http://${lanAddress}:${port}`);
+  }
 });

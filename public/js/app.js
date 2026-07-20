@@ -355,28 +355,203 @@ function refreshScanSummary() {
   }
 }
 
+function clampColor(value) {
+  return Math.max(0, Math.min(255, value));
+}
+
+function detectDocumentBounds(imageData, width, height) {
+  const pixelCount = width * height;
+  if (!pixelCount) return null;
+
+  const grayscale = new Uint8Array(pixelCount);
+  const source = imageData.data;
+  for (let i = 0; i < pixelCount; i += 1) {
+    const base = i * 4;
+    grayscale[i] = Math.round((source[base] * 0.3) + (source[base + 1] * 0.59) + (source[base + 2] * 0.11));
+  }
+
+  const verticalStrength = new Float32Array(width);
+  const horizontalStrength = new Float32Array(height);
+
+  for (let y = 1; y < height; y += 1) {
+    for (let x = 1; x < width; x += 1) {
+      const idx = y * width + x;
+      const gx = Math.abs(grayscale[idx] - grayscale[idx - 1]);
+      const gy = Math.abs(grayscale[idx] - grayscale[idx - width]);
+      verticalStrength[x] += gx;
+      horizontalStrength[y] += gy;
+    }
+  }
+
+  const smoothWindow = 2;
+  function dominantEdge(strength, start, end) {
+    let bestIndex = start;
+    let bestScore = -1;
+
+    for (let i = start; i <= end; i += 1) {
+      let score = 0;
+      let weight = 0;
+
+      for (let offset = -smoothWindow; offset <= smoothWindow; offset += 1) {
+        const sampleIndex = i + offset;
+        if (sampleIndex < start || sampleIndex > end) continue;
+        const sampleWeight = smoothWindow + 1 - Math.abs(offset);
+        score += strength[sampleIndex] * sampleWeight;
+        weight += sampleWeight;
+      }
+
+      const normalizedScore = weight ? score / weight : 0;
+      if (normalizedScore > bestScore) {
+        bestScore = normalizedScore;
+        bestIndex = i;
+      }
+    }
+
+    return bestIndex;
+  }
+
+  const left = dominantEdge(verticalStrength, Math.floor(width * 0.05), Math.floor(width * 0.45));
+  const right = dominantEdge(verticalStrength, Math.floor(width * 0.55), Math.floor(width * 0.95));
+  const top = dominantEdge(horizontalStrength, Math.floor(height * 0.05), Math.floor(height * 0.45));
+  const bottom = dominantEdge(horizontalStrength, Math.floor(height * 0.55), Math.floor(height * 0.95));
+
+  const detectedWidth = right - left;
+  const detectedHeight = bottom - top;
+  if (detectedWidth < width * 0.3 || detectedHeight < height * 0.25) {
+    return null;
+  }
+
+  const padX = Math.round(width * 0.015);
+  const padY = Math.round(height * 0.015);
+  return {
+    x: Math.max(0, left - padX),
+    y: Math.max(0, top - padY),
+    width: Math.min(width, detectedWidth + (padX * 2)),
+    height: Math.min(height, detectedHeight + (padY * 2))
+  };
+}
+
+function enhanceColorScan(imageData) {
+  const { width, height, data } = imageData;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+
+    const avg = (r + g + b) / 3;
+    const saturatedR = avg + ((r - avg) * 1.12);
+    const saturatedG = avg + ((g - avg) * 1.12);
+    const saturatedB = avg + ((b - avg) * 1.12);
+
+    data[i] = clampColor(((saturatedR - 128) * 1.08) + 128);
+    data[i + 1] = clampColor(((saturatedG - 128) * 1.08) + 128);
+    data[i + 2] = clampColor(((saturatedB - 128) * 1.08) + 128);
+  }
+
+  const source = new Uint8ClampedArray(data);
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const index = (y * width + x) * 4;
+      const left = index - 4;
+      const right = index + 4;
+      const up = index - (width * 4);
+      const down = index + (width * 4);
+
+      for (let c = 0; c < 3; c += 1) {
+        const sharpened = (source[index + c] * 5)
+          - source[left + c]
+          - source[right + c]
+          - source[up + c]
+          - source[down + c];
+        data[index + c] = clampColor(sharpened);
+      }
+    }
+  }
+
+  return imageData;
+}
+
+function optimizeScanCanvas(sourceCanvas) {
+  const maxSide = settings?.form?.maxScanSidePx || 1800;
+  const jpegQuality = settings?.form?.jpegQuality || 0.86;
+  const sourceWidth = sourceCanvas.width;
+  const sourceHeight = sourceCanvas.height;
+  const longestSide = Math.max(sourceWidth, sourceHeight) || 1;
+  const scale = longestSide > maxSide ? (maxSide / longestSide) : 1;
+  const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+  const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+  if (scale >= 1) {
+    return sourceCanvas.toDataURL('image/jpeg', jpegQuality);
+  }
+
+  const optimizedCanvas = document.createElement('canvas');
+  optimizedCanvas.width = targetWidth;
+  optimizedCanvas.height = targetHeight;
+  const optimizedContext = optimizedCanvas.getContext('2d');
+  optimizedContext.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
+  return optimizedCanvas.toDataURL('image/jpeg', jpegQuality);
+}
+
 function applyEdgeDetectionFromCurrentFrame() {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const originalImageData = context.getImageData(0, 0, canvas.width, canvas.height);
-  const qualityWarnings = evaluateImageQuality(originalImageData);
+  const sourceImageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-  const data = originalImageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    const threshold = gray > 140 ? 255 : 0;
-    data[i] = threshold;
-    data[i + 1] = threshold;
-    data[i + 2] = threshold;
+  const maxDetectionSide = 920;
+  const scale = Math.min(1, maxDetectionSide / Math.max(canvas.width, canvas.height));
+  const detectionWidth = Math.max(1, Math.round(canvas.width * scale));
+  const detectionHeight = Math.max(1, Math.round(canvas.height * scale));
+  const detectionCanvas = document.createElement('canvas');
+  detectionCanvas.width = detectionWidth;
+  detectionCanvas.height = detectionHeight;
+  const detectionContext = detectionCanvas.getContext('2d');
+  detectionContext.drawImage(canvas, 0, 0, detectionWidth, detectionHeight);
+  const detectionImage = detectionContext.getImageData(0, 0, detectionWidth, detectionHeight);
+  const detectedBounds = detectDocumentBounds(detectionImage, detectionWidth, detectionHeight);
+
+  let outputCanvas = canvas;
+  let outputContext = context;
+  if (detectedBounds) {
+    const mapped = {
+      x: Math.max(0, Math.round(detectedBounds.x / scale)),
+      y: Math.max(0, Math.round(detectedBounds.y / scale)),
+      width: Math.max(1, Math.round(detectedBounds.width / scale)),
+      height: Math.max(1, Math.round(detectedBounds.height / scale))
+    };
+
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = Math.min(canvas.width - mapped.x, mapped.width);
+    cropCanvas.height = Math.min(canvas.height - mapped.y, mapped.height);
+    const cropContext = cropCanvas.getContext('2d');
+    cropContext.drawImage(
+      canvas,
+      mapped.x,
+      mapped.y,
+      cropCanvas.width,
+      cropCanvas.height,
+      0,
+      0,
+      cropCanvas.width,
+      cropCanvas.height
+    );
+    outputCanvas = cropCanvas;
+    outputContext = cropContext;
   }
 
-  context.putImageData(originalImageData, 0, 0);
+  const enhancedImage = enhanceColorScan(outputContext.getImageData(0, 0, outputCanvas.width, outputCanvas.height));
+  outputContext.putImageData(enhancedImage, 0, 0);
+  const qualityWarnings = evaluateImageQuality(enhancedImage);
+  const optimizedDataUrl = optimizeScanCanvas(outputCanvas);
+
   return {
-    dataUrl: canvas.toDataURL('image/jpeg', 0.92),
-    qualityWarnings
+    dataUrl: optimizedDataUrl,
+    qualityWarnings,
+    edgeDetected: Boolean(detectedBounds)
   };
 }
 
@@ -388,9 +563,11 @@ function captureInvoice() {
   refreshScanSummary();
 
   if (result.qualityWarnings.length) {
-    statusEl.textContent = `Scan captured with warning: ${result.qualityWarnings.join(' ')}`;
+    statusEl.textContent = `Color scan captured${result.edgeDetected ? ' with edge crop' : ''} and warning: ${result.qualityWarnings.join(' ')}`;
   } else {
-    statusEl.textContent = 'Scan captured. Add more scans if needed, then save to the queue as a PDF.';
+    statusEl.textContent = result.edgeDetected
+      ? 'Color scan captured with edge detection. Add more scans if needed, then save to the queue as a PDF.'
+      : 'Color scan captured. Add more scans if needed, then save to the queue as a PDF.';
   }
 }
 
@@ -700,6 +877,7 @@ async function syncQueue() {
 
   const remaining = [];
   let failedThisRun = 0;
+  let lastError = '';
 
   for (const item of pendingQueue) {
     try {
@@ -708,10 +886,14 @@ async function syncQueue() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item)
       });
-      if (!response.ok) throw new Error('sync failed');
+      if (!response.ok) {
+        const details = await response.text();
+        throw new Error(`Upload failed (${response.status}): ${details || 'Unknown server error'}`);
+      }
     } catch (error) {
       remaining.push(item);
       failedThisRun += 1;
+      lastError = error?.message || 'Network error while uploading';
     }
   }
 
@@ -722,7 +904,7 @@ async function syncQueue() {
   await saveQueue();
 
   statusEl.textContent = pendingQueue.length
-    ? 'Some items need another sync attempt.'
+    ? `Some items need another sync attempt.${lastError ? ` ${lastError}` : ''}`
     : 'All deliveries uploaded.';
 }
 
