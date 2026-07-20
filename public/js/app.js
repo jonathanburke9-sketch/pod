@@ -431,6 +431,17 @@ function detectDocumentBounds(imageData, width, height) {
   };
 }
 
+function guideCropBounds(width, height) {
+  const insetX = Math.round(width * 0.08);
+  const insetY = Math.round(height * 0.08);
+  return {
+    x: insetX,
+    y: insetY,
+    width: Math.max(1, width - (insetX * 2)),
+    height: Math.max(1, height - (insetY * 2))
+  };
+}
+
 function enhanceColorScan(imageData) {
   const { width, height, data } = imageData;
 
@@ -513,15 +524,17 @@ function applyEdgeDetectionFromCurrentFrame() {
   detectionContext.drawImage(canvas, 0, 0, detectionWidth, detectionHeight);
   const detectionImage = detectionContext.getImageData(0, 0, detectionWidth, detectionHeight);
   const detectedBounds = detectDocumentBounds(detectionImage, detectionWidth, detectionHeight);
+  const fallbackBounds = guideCropBounds(detectionWidth, detectionHeight);
+  const cropBounds = detectedBounds || fallbackBounds;
 
   let outputCanvas = canvas;
   let outputContext = context;
-  if (detectedBounds) {
+  if (cropBounds) {
     const mapped = {
-      x: Math.max(0, Math.round(detectedBounds.x / scale)),
-      y: Math.max(0, Math.round(detectedBounds.y / scale)),
-      width: Math.max(1, Math.round(detectedBounds.width / scale)),
-      height: Math.max(1, Math.round(detectedBounds.height / scale))
+      x: Math.max(0, Math.round(cropBounds.x / scale)),
+      y: Math.max(0, Math.round(cropBounds.y / scale)),
+      width: Math.max(1, Math.round(cropBounds.width / scale)),
+      height: Math.max(1, Math.round(cropBounds.height / scale))
     };
 
     const cropCanvas = document.createElement('canvas');
@@ -551,7 +564,8 @@ function applyEdgeDetectionFromCurrentFrame() {
   return {
     dataUrl: optimizedDataUrl,
     qualityWarnings,
-    edgeDetected: Boolean(detectedBounds)
+    edgeDetected: Boolean(detectedBounds),
+    guideCropped: !detectedBounds
   };
 }
 
@@ -563,11 +577,13 @@ function captureInvoice() {
   refreshScanSummary();
 
   if (result.qualityWarnings.length) {
-    statusEl.textContent = `Color scan captured${result.edgeDetected ? ' with edge crop' : ''} and warning: ${result.qualityWarnings.join(' ')}`;
+    statusEl.textContent = `Color scan captured${result.edgeDetected ? ' with edge crop' : (result.guideCropped ? ' with guide crop' : '')} and warning: ${result.qualityWarnings.join(' ')}`;
   } else {
     statusEl.textContent = result.edgeDetected
       ? 'Color scan captured with edge detection. Add more scans if needed, then save to the queue as a PDF.'
-      : 'Color scan captured. Add more scans if needed, then save to the queue as a PDF.';
+      : (result.guideCropped
+        ? 'Color scan captured with guide crop. Add more scans if needed, then save to the queue as a PDF.'
+        : 'Color scan captured. Add more scans if needed, then save to the queue as a PDF.');
   }
 }
 
@@ -868,6 +884,7 @@ async function syncQueue() {
   }
 
   if (!pendingQueue.length) {
+    health.failedUploads = 0;
     health.lastSyncAt = new Date().toISOString();
     saveHealth();
     refreshHealthPanel();
@@ -876,7 +893,6 @@ async function syncQueue() {
   }
 
   const remaining = [];
-  let failedThisRun = 0;
   let lastError = '';
 
   for (const item of pendingQueue) {
@@ -892,13 +908,12 @@ async function syncQueue() {
       }
     } catch (error) {
       remaining.push(item);
-      failedThisRun += 1;
       lastError = error?.message || 'Network error while uploading';
     }
   }
 
   pendingQueue = remaining;
-  health.failedUploads = (health.failedUploads || 0) + failedThisRun;
+  health.failedUploads = remaining.length;
   health.lastSyncAt = new Date().toISOString();
   saveHealth();
   await saveQueue();
