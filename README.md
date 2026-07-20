@@ -213,6 +213,30 @@ Upload response now includes storage result and OneDrive result:
 }
 ```
 
+Storage health endpoint:
+
+`GET /api/health/storage`
+
+Example response:
+
+```json
+{
+	"ok": true,
+	"supabaseConfigured": true,
+	"oneDriveConfigured": true,
+	"oneDriveRootExists": true,
+	"oneDrivePodRoot": "POD_Uploads",
+	"drivers": [
+		{
+			"id": "driver-002",
+			"name": "Deon",
+			"folder": "Deon",
+			"folderExists": true
+		}
+	]
+}
+```
+
 Fallback strategy:
 
 1. Keep local file write as fallback.

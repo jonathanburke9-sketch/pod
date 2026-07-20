@@ -195,6 +195,32 @@ async function getDriversWithFallback() {
   return readJsonFile(driversFile, fallbackDrivers);
 }
 
+async function getStorageHealth() {
+  const drivers = await getDriversWithFallback();
+  const oneDriveRootExists = Boolean(oneDriveRoot) && fs.existsSync(oneDriveRoot);
+
+  return {
+    ok: true,
+    supabaseConfigured: hasSupabaseConfig,
+    oneDriveConfigured: Boolean(oneDriveRoot),
+    oneDriveRootExists,
+    oneDrivePodRoot,
+    drivers: drivers.map(driver => {
+      const folderName = safePathSegment(driver.folder || driver.name || driver.id);
+      const folderPath = oneDriveRoot
+        ? path.join(oneDriveRoot, oneDrivePodRoot, folderName)
+        : '';
+
+      return {
+        id: driver.id,
+        name: driver.name,
+        folder: driver.folder,
+        folderExists: Boolean(folderPath) && fs.existsSync(folderPath)
+      };
+    })
+  };
+}
+
 function safePathSegment(value) {
   const text = String(value || '').trim();
   if (!text) return 'unknown';
@@ -275,6 +301,12 @@ const server = http.createServer(async (req, res) => {
     const drivers = await getDriversWithFallback();
 
     sendJson(res, 200, drivers);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/health/storage') {
+    const health = await getStorageHealth();
+    sendJson(res, 200, health);
     return;
   }
 
