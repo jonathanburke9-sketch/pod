@@ -1,181 +1,321 @@
-# POD Pulse User Guide
+# POD Pulse Setup Guide (Supabase + OneDrive)
 
-POD Pulse is a proof-of-delivery app for drivers. It lets you capture signed delivery documents with the phone camera, add invoice details and notes, save multiple scans as a single PDF, and keep records safely offline until you are ready to sync.
+POD Pulse is an offline-first proof-of-delivery app for drivers. This guide explains:
 
-## Installation
-1. Install Node.js 18 or later.
-2. Open a terminal in the project folder.
-3. Run `npm install`.
-4. Confirm the app starts with `npm test` if you want to check the current code first.
+1. How to run the app now (current local JSON mode).
+2. How to set up Supabase in detail.
+3. How to link OneDrive folders to the driver mapping.
+4. How to migrate from local files to cloud-backed storage.
 
-## Run Locally
-1. Start the app with `npm start`.
-2. Open `http://localhost:3000` in your browser.
-3. Open `http://localhost:3000/admin.html` if you need to manage drivers.
+## Current Architecture
 
-## Deployment
-This project currently deploys as a simple Node app.
+At the moment, the running app behavior is:
 
-### Local or Server Deployment Steps
-1. Copy the repository to the machine that will host the app.
-2. Install Node.js 18 or later on that machine.
-3. Run `npm install`.
-4. Set any required environment variables, such as `PORT` or `ADMIN_KEY`, if you want to override defaults.
-5. Start the server with `npm start`.
-6. Point your browser or reverse proxy to the running host and port.
+- Driver list API reads from `data/drivers.json`.
+- Upload API stores payloads in `data/submissions.json`.
+- Supabase client exists in `lib/supabase.js`, but `server.js` is not yet wired to use it.
 
-### Deployment Notes
-- Default port: `3000`
-- Main server entry point: `server.js`
-- Production data files live in `data/`
-- The app serves the driver UI from `public/`
+This README gives you the exact setup so you can switch cleanly.
 
-## Device Deployment
-Use these steps when you want to put the app onto driver devices such as phones or tablets.
+## Prerequisites
 
-### Before You Roll Out
-1. Host the app on a machine or server that drivers can reach over the network.
-2. Use a stable URL that stays the same for all devices.
-3. Make sure the site is available over HTTPS in production.
-4. Confirm the server is running and the driver list loads correctly.
-5. Decide whether the admin page will be available only to supervisors.
+1. Node.js 18+
+2. npm
+3. Supabase account and project
+4. Microsoft OneDrive account (personal or business)
 
-### Install on Each Device
-1. Open the app URL in the device browser.
-2. Allow camera access when prompted.
-3. If the browser offers it, install the app to the home screen.
-4. Open the installed app from the home screen icon.
-5. Link the device to the correct driver the first time it is used.
+## Local Installation
 
-### Device Setup Checklist
-1. Confirm the device has a working camera.
-2. Confirm the device has enough storage for queued PDFs.
-3. Confirm the date and time are correct on the device.
-4. Test one capture before going live.
-5. Test offline mode by turning off Wi-Fi or mobile data briefly.
-6. Confirm the queue count updates after saving.
+1. Install dependencies:
 
-### Recommended Rollout Order
-1. Set up the server.
-2. Verify the driver list and admin page.
-3. Install the app on one test device.
-4. Bind the device to a driver.
-5. Capture and save one sample POD.
-6. Sync the queue.
-7. Repeat for the remaining devices.
+```bash
+npm install
+```
 
-### Device Use Notes
-- The device stays linked to the first driver chosen on that device.
-- Users should enter invoice numbers as digits only.
-- The app adds the `INV-` prefix automatically.
-- Users can add notes and multiple scans before saving.
+2. Start the server:
 
-## What You Can Do
-- Capture one or more invoice scans.
-- Save each submission as a PDF.
-- Enter invoice numbers using digits only. The app adds `INV-` automatically.
-- Add optional notes to a submission.
-- Choose a payment method.
-- Work offline and sync later.
-- Lock the app to a specific driver on a device.
+```bash
+npm start
+```
 
-## Driver Setup
-When the app first opens, it asks you to link the device to a driver.
+3. Open:
 
-1. Select your name from the driver list.
-2. Click the button to lock the driver to the device.
-3. After the device is linked, the driver cannot be changed from the app.
+- Driver app: `http://localhost:3000`
+- Admin page: `http://localhost:3000/admin.html`
 
-If the driver is already linked, the app shows the linked name at the top of the screen.
+## Environment Variables
 
-## Taking a Proof of Delivery
-1. Point the camera at the invoice.
-2. Click Capture scan.
-3. Repeat for more pages if needed.
-4. Use Remove last scan or Clear scans if you need to correct something.
-5. Enter the invoice number digits only.
-6. Add notes if needed.
-7. Choose the payment method.
-8. Save the submission to the offline queue.
+Create a `.env` file in the project root for secure secrets:
 
-The app applies an edge-detection style scan effect and stores the final submission as one PDF made from all captured scans.
+```env
+PORT=3000
+HOST=0.0.0.0
+ADMIN_KEY=replace_with_strong_admin_key
 
-## Invoice Number Format
-- Type digits only in the invoice field.
-- The app automatically saves it as `INV-` plus the digits you entered.
-- There is no fixed digit count, so any number of digits is accepted.
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_ANON_KEY=your_anon_key
+```
+
+Notes:
+
+- `SUPABASE_SERVICE_ROLE_KEY` must only be used on the server.
+- Never expose service role keys to browser code.
+- Keep `.env` out of source control.
+
+## Supabase Project Setup (Detailed)
+
+### Step 1: Create Project
+
+1. Go to Supabase Dashboard.
+2. Create a new project.
+3. Save:
+
+- Project URL
+- `anon` key
+- `service_role` key
+
+### Step 2: Create Tables
+
+Run this SQL in Supabase SQL Editor:
+
+```sql
+create extension if not exists pgcrypto;
+
+create table if not exists drivers (
+	id text primary key,
+	name text not null,
+	folder text not null,
+	active boolean not null default true,
+	created_at timestamptz not null default now(),
+	updated_at timestamptz not null default now()
+);
+
+create table if not exists pod_submissions (
+	id uuid primary key default gen_random_uuid(),
+	driver_id text not null,
+	driver_name text not null,
+	driver_folder text not null,
+	invoice_number text not null,
+	payment_method text,
+	notes text,
+	pod_pdf_url text,
+	status text not null default 'queued',
+	source_device text,
+	payload jsonb,
+	created_at timestamptz not null default now(),
+	synced_at timestamptz
+);
+
+create index if not exists idx_pod_submissions_driver_id
+	on pod_submissions(driver_id);
+
+create index if not exists idx_pod_submissions_created_at
+	on pod_submissions(created_at desc);
+```
+
+Optional trigger to auto-update `updated_at` on `drivers`:
+
+```sql
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+	new.updated_at = now();
+	return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_drivers_updated_at on drivers;
+create trigger trg_drivers_updated_at
+before update on drivers
+for each row
+execute function set_updated_at();
+```
+
+### Step 3: Seed Drivers
+
+```sql
+insert into drivers (id, name, folder) values
+('driver-001', 'Jonathan (Admin)', 'Jonathan-Admin'),
+('driver-002', 'Deon', 'Deon'),
+('driver-003', 'Themba', 'Themba'),
+('driver-004', 'Janine', 'Janine'),
+('driver-005', 'Wilna', 'Wilna')
+on conflict (id) do update
+set name = excluded.name,
+		folder = excluded.folder,
+		active = true;
+```
+
+### Step 4: Enable Row Level Security
+
+For internal server-only access with service role key, policies can stay strict while server bypasses RLS.
+
+```sql
+alter table drivers enable row level security;
+alter table pod_submissions enable row level security;
+```
+
+If you later expose direct browser reads with `anon` key, add explicit read policies.
+
+### Step 5: Storage Bucket for PDFs
+
+1. Go to Supabase Storage.
+2. Create bucket: `pod-files`.
+3. Set privacy based on requirements:
+
+- Private recommended for signed POD files.
+
+Recommended object path format:
+
+`POD_Uploads/<driver-folder>/<invoice-number>/<timestamp>.pdf`
+
+## Wiring This Codebase to Supabase
+
+`lib/supabase.js` is already present and creates a Supabase client from env vars.
+
+To fully switch from local JSON to Supabase, update `server.js` API handlers:
+
+1. `GET /api/drivers`
+
+- Replace file read with `select id, name, folder from drivers where active = true`.
+
+2. `POST /api/admin/drivers`
+
+- Validate admin key.
+- Upsert rows into `drivers`.
+
+3. `POST /api/upload`
+
+- Insert payload into `pod_submissions`.
+- Optionally store generated PDF in `pod-files` and save URL/path.
+
+Migration strategy:
+
+1. Keep local file write as fallback.
+2. Try Supabase insert first.
+3. If Supabase fails, queue locally and retry.
+
+## OneDrive Folder Linking (Detailed)
+
+The app uses each driver's `folder` value to map delivery files to destination folders.
+
+### Folder Convention
+
+Use this base structure in OneDrive:
+
+```text
+OneDrive/
+	POD_Uploads/
+		Jonathan-Admin/
+		Deon/
+		Themba/
+		Janine/
+		Wilna/
+```
+
+Important rules:
+
+1. Folder name must match the driver `folder` value exactly.
+2. Avoid trailing spaces and special characters.
+3. Keep naming stable after drivers are linked.
+
+### Windows Setup Steps
+
+1. Open OneDrive folder on the server PC.
+2. Create `POD_Uploads`.
+3. Create one subfolder per driver using exact mapping values.
+4. Confirm OneDrive status is green check (fully synced).
+
+### Link Driver Mapping in Admin
+
+1. Open `http://localhost:3000/admin.html`.
+2. Enter admin key.
+3. For each driver row:
+
+- `name`: display name in the app.
+- `folder`: exact OneDrive subfolder name.
+
+4. Save drivers.
+
+### Verify Link Integrity
+
+Use this checklist:
+
+1. Driver appears in app dropdown.
+2. Driver has non-empty folder value.
+3. Folder exists in `OneDrive/POD_Uploads/`.
+4. Names match exactly (case and spaces).
+
+## Suggested Upload Path Format
+
+When saving each POD file, build paths like:
+
+`POD_Uploads/<driver-folder>/<YYYY>/<MM>/INV-<number>_<timestamp>.pdf`
 
 Example:
-- You type `1042`
-- The app saves `INV-1042`
 
-## Notes
-Use the Notes field for any extra delivery details, such as damaged packaging, customer comments, or special handoff instructions. Notes are saved with the queued submission.
+`POD_Uploads/Deon/2026/07/INV-1042_2026-07-20T14-22-13Z.pdf`
 
-## Offline Queue
-POD Pulse keeps your queued submissions on the device so you can continue working without a connection.
+This improves search, monthly audits, and recovery.
 
-- Queue records are stored in IndexedDB.
-- Older queue data from `localStorage` is migrated automatically.
-- The queue count at the top of the app shows how many submissions are waiting.
-- When the device is online, the app tries to sync queued items.
+## Migration from Local Data
 
-## Payment Methods
-The app currently supports:
-- EFT
-- Cash
-- S2S
+### Drivers Migration
 
-## Driver Administration
-Open the admin page if you need to manage driver names or folder mappings.
+1. Export `data/drivers.json`.
+2. Upsert into Supabase `drivers` table.
+3. Verify admin page returns Supabase values.
 
-1. Go to `http://localhost:3000/admin.html`.
-2. Enter the admin key if one is configured.
-3. Add, remove, or edit drivers.
-4. Save the driver list.
+### Submissions Migration
 
-Each driver should have a matching folder name for the upload destination.
+1. Export `data/submissions.json`.
+2. Transform each object into `pod_submissions` fields.
+3. Keep original object inside `payload` for traceability.
 
-## Driver List
-The current drivers are:
-- Jonathan (Admin)
-- Deon
-- Themba
-- Janine
-- Wilna
+## Security Recommendations
 
-## Folder Naming
-If you are preparing OneDrive folders for later upload use, follow this pattern:
-
-1. Create a root folder named `POD_Uploads`.
-2. Create one subfolder for each driver.
-3. Keep the folder name exactly the same as the driver mapping.
-4. Avoid trailing spaces or duplicate names.
+1. Use strong `ADMIN_KEY`.
+2. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only.
+3. Use HTTPS in production.
+4. Restrict server firewall to required ports.
+5. Back up Supabase and OneDrive regularly.
 
 ## Project Files
-- `public/index.html` main driver app page
-- `public/admin.html` driver admin page
-- `public/css/styles.css` shared styling
+
+- `server.js` HTTP API and static serving
+- `lib/supabase.js` Supabase client bootstrap
+- `data/drivers.json` local fallback drivers
+- `data/submissions.json` local fallback submissions
+- `public/index.html` driver UI
+- `public/admin.html` admin UI
 - `public/js/app.js` driver app logic
-- `public/js/admin.js` admin page logic
-- `settings/app_settings.json` labels, button text, and validation settings
-- `data/drivers.json` current driver data
-- `data/submissions.json` queued submission metadata
-- `server.js` local Node server
+- `public/js/admin.js` admin panel logic
+- `settings/app_settings.json` UI labels and configuration
 
-## Useful Commands
-- `npm install` install dependencies
-- `npm start` start the app locally
-- `npm test` run the test suite
+## Commands
 
-## Troubleshooting
-If the app does not work as expected:
+```bash
+npm install
+npm start
+npm test
+```
 
-1. Check that the camera has permission to run.
-2. Make sure the driver has been locked to the device.
-3. Confirm the invoice field contains digits only.
-4. Make sure at least one scan has been captured before saving.
-5. If sync does not work, check whether the device is online.
+## Quick Troubleshooting
 
-## Current Status
-This project currently runs from local JSON and browser storage, while the later Supabase and OneDrive migration remains documented as a future step.
+### Drivers not loading
+
+1. Check `/api/drivers` response in browser network tab.
+2. Validate `drivers` table rows in Supabase.
+3. Confirm server env vars are loaded.
+
+### Admin save fails
+
+1. Verify `ADMIN_KEY` header matches server value.
+2. Check server logs for 403 or validation errors.
+
+### OneDrive files missing
+
+1. Confirm driver folder mapping text matches exactly.
+2. Confirm OneDrive client is signed in and syncing.
+3. Check folder permissions for service account/user.
