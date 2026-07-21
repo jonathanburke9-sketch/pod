@@ -19,7 +19,9 @@ const driversFile = path.join(packagedDataDir, 'drivers.json');
 const adminKey = process.env.ADMIN_KEY || '';
 const hasSupabaseConfig = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
-const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT || 'POD_Uploads';
+const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
+  ? 'POD_Uploads'
+  : process.env.ONEDRIVE_POD_ROOT;
 
 let supabase = null;
 if (hasSupabaseConfig) {
@@ -334,19 +336,20 @@ function writePdfToOneDrive(payload, mappedFolder) {
   const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
   const fileName = sanitizeFileName(payload.filename || fallbackFileName);
 
-  const absoluteDir = path.join(oneDriveRoot, oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month);
+  const pathSegments = [oneDriveRoot];
+  if (oneDrivePodRoot) {
+    pathSegments.push(oneDrivePodRoot);
+  }
+  pathSegments.push(folderSegment, timeParts.year, timeParts.month);
+  const absoluteDir = path.join(...pathSegments);
   fs.mkdirSync(absoluteDir, { recursive: true });
 
   const absoluteFilePath = path.join(absoluteDir, fileName);
   fs.writeFileSync(absoluteFilePath, pdfBuffer);
 
-  const relativePath = [
-    oneDrivePodRoot,
-    folderSegment,
-    timeParts.year,
-    timeParts.month,
-    fileName
-  ].join('/');
+  const relativePath = [oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month, fileName]
+    .filter(Boolean)
+    .join('/');
 
   return {
     saved: true,

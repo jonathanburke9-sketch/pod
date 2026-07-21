@@ -921,6 +921,7 @@ async function syncQueue() {
 
   const remaining = [];
   let lastError = '';
+  let lastSuccessMessage = '';
 
   for (const item of pendingQueue) {
     try {
@@ -933,6 +934,14 @@ async function syncQueue() {
         const details = await response.text();
         throw new Error(`Upload failed (${response.status}): ${details || 'Unknown server error'}`);
       }
+
+      const result = await response.json().catch(() => null);
+      const oneDrivePath = result?.oneDrive?.relativePath;
+      const storageLabel = result?.storage || 'server';
+      const warning = result?.warning ? ` ${result.warning}` : '';
+      lastSuccessMessage = oneDrivePath
+        ? `Uploaded to ${storageLabel}: ${oneDrivePath}.${warning}`
+        : `Uploaded to ${storageLabel}.${warning}`;
     } catch (error) {
       remaining.push(item);
       lastError = error?.message || 'Network error while uploading';
@@ -947,7 +956,7 @@ async function syncQueue() {
 
   statusEl.textContent = pendingQueue.length
     ? `Some items need another sync attempt.${lastError ? ` ${lastError}` : ''}`
-    : 'All deliveries uploaded.';
+    : (lastSuccessMessage || 'All deliveries uploaded.');
 }
 
 captureBtn.addEventListener('click', captureInvoice);
