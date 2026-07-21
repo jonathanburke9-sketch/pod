@@ -178,15 +178,28 @@ async function writeSubmissionToSupabase(payload) {
     synced_at: new Date().toISOString()
   };
 
-  const { error } = await supabase
+  const timeoutMs = Number(process.env.SUPABASE_TIMEOUT_MS || '8000');
+  const insertPromise = supabase
     .from('pod_submissions')
     .insert(row);
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`Supabase timeout after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  const { error } = await Promise.race([insertPromise, timeoutPromise]);
 
   if (error) {
     throw error;
   }
 
   return true;
+}
+
+function isSupabaseInvocationFailure(error) {
+  const message = String(error?.message || '').toUpperCase();
+  const code = String(error?.code || '').toUpperCase();
+  return message.includes('FUNCTION_INVOCATION_FAILED') || code.includes('FUNCTION_INVOCATION_FAILED');
 }
 
 async function getDriversWithFallback() {
@@ -373,50 +386,63 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const drivers = await getDriversWithFallback();
-    const matchedDriver = drivers.find(driver => driver.id === payload.driverId);
-    const mappedFolder = (matchedDriver && matchedDriver.folder)
-      || payload.folder
-      || payload.driverFolder
-      || payload.driverName
-      || 'Unmapped';
-
-    payload.folder = mappedFolder;
-
-    let oneDrive = { saved: false, reason: 'Not attempted' };
     try {
-      oneDrive = writePdfToOneDrive(payload, mappedFolder);
-      if (oneDrive.saved) {
-        payload.podPdfPath = oneDrive.relativePath;
-      }
-    } catch (error) {
-      oneDrive = { saved: false, reason: error.message || 'OneDrive write failed' };
-      console.error('OneDrive mapping write failed.', oneDrive.reason);
-    }
+      const drivers = await getDriversWithFallback();
+      const matchedDriver = Array.isArray(drivers)
+        ? drivers.find(driver => driver.id === payload.driverId)
+        : null;
+      const mappedFolder = (matchedDriver && matchedDriver.folder)
+        || payload.folder
+        || payload.driverFolder
+        || payload.driverName
+        || 'Unmapped';
 
-    let storage = 'local';
-    if (supabase) {
+      payload.folder = mappedFolder;
+
+      let oneDrive = { saved: false, reason: 'Not attempted' };
       try {
-        await writeSubmissionToSupabase(payload);
-        storage = 'supabase';
+        oneDrive = writePdfToOneDrive(payload, mappedFolder);
+        if (oneDrive.saved) {
+          payload.podPdfPath = oneDrive.relativePath;
+        }
       } catch (error) {
-        console.error('Supabase upload failed. Falling back to local file queue.', error.message);
+        oneDrive = { saved: false, reason: error.message || 'OneDrive write failed' };
+        console.error('OneDrive mapping write failed.', oneDrive.reason);
       }
-    }
 
-    if (storage !== 'supabase') {
-      const existing = readJsonFile(submissionsFile, []);
-      existing.push(payload);
-      fs.writeFileSync(submissionsFile, JSON.stringify(existing, null, 2));
-      storage = 'local';
-    }
+      let storage = 'local';
+      let warning = '';
+      if (supabase) {
+        try {
+          await writeSubmissionToSupabase(payload);
+          storage = 'supabase';
+        } catch (error) {
+          warning = isSupabaseInvocationFailure(error)
+            ? 'Supabase function failed, saved locally instead.'
+            : 'Supabase unavailable, saved locally instead.';
+          console.error('Supabase upload failed. Falling back to local file queue.', error.message);
+        }
+      }
 
-    sendJson(res, 200, {
-      ok: true,
-      storage,
-      oneDrive
-    });
-    return;
+      if (storage !== 'supabase') {
+        const existing = readJsonFile(submissionsFile, []);
+        existing.push(payload);
+        fs.writeFileSync(submissionsFile, JSON.stringify(existing, null, 2));
+        storage = 'local';
+      }
+
+      sendJson(res, 200, {
+        ok: true,
+        storage,
+        oneDrive,
+        warning
+      });
+      return;
+    } catch (error) {
+      console.error('Upload pipeline failed.', error.message);
+      sendJson(res, 500, { error: 'Upload pipeline failed on server' });
+      return;
+    }
   }
 
   if (req.method === 'GET' && url.pathname.startsWith('/settings/')) {
