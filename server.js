@@ -83,21 +83,28 @@ function readJsonFile(filePath, fallbackValue) {
 
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
-    const maxBodySize = 25 * 1024 * 1024;
+    const configuredMaxMb = Number(process.env.UPLOAD_MAX_MB || '50');
+    const maxBodySize = (Number.isFinite(configuredMaxMb) && configuredMaxMb > 0 ? configuredMaxMb : 50) * 1024 * 1024;
     let bodySize = 0;
     let body = '';
+    let tooLarge = false;
 
     req.on('data', chunk => {
+      if (tooLarge) return;
       bodySize += chunk.length;
       if (bodySize > maxBodySize) {
-        reject(new Error('Payload too large'));
-        req.destroy();
+        tooLarge = true;
         return;
       }
       body += chunk;
     });
 
     req.on('end', () => {
+      if (tooLarge) {
+        reject(new Error(`Payload too large (max ${Math.round(maxBodySize / (1024 * 1024))}MB)`));
+        return;
+      }
+
       try {
         const parsed = JSON.parse(body || '{}');
         resolve(parsed);
@@ -356,10 +363,11 @@ const server = http.createServer(async (req, res) => {
     try {
       payload = await parseJsonBody(req);
     } catch (error) {
-      const statusCode = error.message === 'Payload too large' ? 413 : 400;
+      const tooLarge = error.message && error.message.toLowerCase().startsWith('payload too large');
+      const statusCode = tooLarge ? 413 : 400;
       sendJson(res, statusCode, {
-        error: error.message === 'Payload too large'
-          ? 'Upload payload too large. Capture fewer pages or try lower resolution.'
+        error: tooLarge
+          ? `${error.message}. Capture fewer pages or try lower resolution.`
           : 'Invalid JSON payload'
       });
       return;
