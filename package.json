@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "sync:onedrive": "node sync-onedrive.js",
+    "sync:onedrive:watch": "node sync-onedrive.js --watch",
     "test": "node --test"
   },
   "engines": {

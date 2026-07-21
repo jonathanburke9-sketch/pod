@@ -294,6 +294,23 @@ function sanitizeFileName(value) {
   return `${cleaned}.pdf`;
 }
 
+function getOneDriveUnavailableReason() {
+  if (!oneDriveRoot) {
+    return 'ONEDRIVE_ROOT is not configured';
+  }
+
+  const isWindowsDrivePath = /^[a-zA-Z]:\\/.test(oneDriveRoot);
+  if (process.env.VERCEL) {
+    return 'Filesystem OneDrive writes are not supported on Vercel. This deployment can upload to Supabase, but not to your local PC folder.';
+  }
+
+  if (isWindowsDrivePath && process.platform !== 'win32') {
+    return 'ONEDRIVE_ROOT points to a Windows folder, but this server is not running on Windows.';
+  }
+
+  return '';
+}
+
 function appendSubmissionLocally(payload) {
   const existing = readJsonArrayFile(submissionsFile);
   existing.push(payload);
@@ -321,8 +338,9 @@ function buildTimestampParts(isoTimestamp) {
 }
 
 function writePdfToOneDrive(payload, mappedFolder) {
-  if (!oneDriveRoot) {
-    return { saved: false, reason: 'ONEDRIVE_ROOT is not configured' };
+  const unavailableReason = getOneDriveUnavailableReason();
+  if (unavailableReason) {
+    return { saved: false, reason: unavailableReason };
   }
 
   const pdfBuffer = dataUrlPdfToBuffer(payload.imageData);
@@ -466,6 +484,12 @@ const server = http.createServer(async (req, res) => {
             : 'Supabase unavailable, saved locally instead.';
           console.error('Supabase upload failed. Falling back to local file queue.', error.message);
         }
+      }
+
+      if (!oneDrive.saved && oneDrive.reason) {
+        warning = warning
+          ? `${warning} OneDrive copy failed: ${oneDrive.reason}`
+          : `OneDrive copy failed: ${oneDrive.reason}`;
       }
 
       if (storage !== 'supabase') {

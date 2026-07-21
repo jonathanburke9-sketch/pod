@@ -941,7 +941,7 @@ async function syncQueue() {
       const warning = result?.warning ? ` ${result.warning}` : '';
       lastSuccessMessage = oneDrivePath
         ? `Uploaded to ${storageLabel}: ${oneDrivePath}.${warning}`
-        : `Uploaded to ${storageLabel}.${warning}`;
+        : `Uploaded to ${storageLabel}.${warning || ' No folder copy was created.'}`;
     } catch (error) {
       remaining.push(item);
       lastError = error?.message || 'Network error while uploading';

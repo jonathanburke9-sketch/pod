@@ -12,8 +12,8 @@ POD Pulse is an offline-first proof-of-delivery app for drivers. This guide expl
 At the moment, the running app behavior is:
 
 - Driver list API reads from `data/drivers.json`.
-- Upload API stores payloads in `data/submissions.json`.
-- Supabase client exists in `lib/supabase.js`, but `server.js` is not yet wired to use it.
+- Upload API can store payloads in Supabase and optionally mirror PDFs into a local OneDrive folder.
+- A local worker can pull Supabase submissions that do not yet have a OneDrive path and write them into the mapped driver folders.
 
 This README gives you the exact setup so you can switch cleanly.
 
@@ -58,6 +58,8 @@ SUPABASE_ANON_KEY=your_anon_key
 
 ONEDRIVE_ROOT=C:\\Users\\<your-user>\\OneDrive
 ONEDRIVE_POD_ROOT=POD_Uploads
+SYNC_BATCH_SIZE=25
+SYNC_INTERVAL_MS=30000
 ```
 
 Notes:
@@ -67,6 +69,8 @@ Notes:
 - Keep `.env` out of source control.
 - `ONEDRIVE_ROOT` must point to the local synced OneDrive base folder on the server machine.
 - `ONEDRIVE_POD_ROOT` defaults to `POD_Uploads` if omitted.
+- `SYNC_BATCH_SIZE` controls how many Supabase rows the worker mirrors per pass.
+- `SYNC_INTERVAL_MS` controls watch-mode polling interval for the worker.
 
 ## Supabase Project Setup (Detailed)
 
@@ -199,6 +203,14 @@ Current behavior:
 - Inserts into `pod_submissions` in Supabase (if configured).
 - Falls back to `data/submissions.json` when Supabase is unavailable.
 
+4. `sync-onedrive.js`
+
+- Runs on the Windows machine that has access to the synced OneDrive folder.
+- Reads Supabase rows where `pod_pdf_url` is still `null`.
+- Rebuilds the PDF from `payload.imageData`.
+- Writes the PDF into the mapped OneDrive driver folder.
+- Updates `pod_submissions.pod_pdf_url` and marks the row as `mirrored`.
+
 Upload response now includes storage result and OneDrive result:
 
 ```json
@@ -242,6 +254,53 @@ Fallback strategy:
 1. Keep local file write as fallback.
 2. Try Supabase insert first.
 3. If Supabase fails, queue locally and retry.
+
+## Supabase To OneDrive Worker
+
+Use this when your app is deployed on Vercel or any remote host that cannot write directly into your Windows OneDrive folder.
+
+Why it exists:
+
+- Vercel can upload metadata and payloads to Supabase.
+- Vercel cannot write to `C:\Users\...\OneDrive` on your PC.
+- This worker runs locally on the Windows machine that has the OneDrive folder and mirrors pending Supabase submissions into that folder.
+
+One-time sync pass:
+
+```bash
+npm run sync:onedrive
+```
+
+Continuous watch mode:
+
+```bash
+npm run sync:onedrive:watch
+```
+
+Worker behavior:
+
+1. Fetch rows from `pod_submissions` where `pod_pdf_url` is `null`.
+2. Read `payload.imageData` from each row.
+3. Save the PDF into the mapped folder under `ONEDRIVE_ROOT` and `ONEDRIVE_POD_ROOT`.
+4. Update `pod_pdf_url` in Supabase with the relative file path.
+5. Mark the row status as `mirrored`.
+
+Example output path:
+
+```text
+C:\Users\<your-user>\OneDrive\POD_Uploads\Deon\2026\07\INV-1042_20260721-083012.pdf
+```
+
+Recommended deployment shape:
+
+1. Host the app/API on Vercel for phone access.
+2. Keep Supabase as the durable upload store.
+3. Run `npm run sync:onedrive:watch` on the Windows machine that has the synced OneDrive folder.
+
+If the worker reports `No pending Supabase submissions to mirror.`, it means either:
+
+- all uploaded rows already have `pod_pdf_url`, or
+- the remote upload never reached Supabase and you should inspect the upload status message first.
 
 ## OneDrive Folder Linking (Detailed)
 
