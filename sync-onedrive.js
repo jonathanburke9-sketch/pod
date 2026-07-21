@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const supabase = require('./lib/supabase');
+const businessOneDrive = require('./lib/onedrive-business');
 
 const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
 const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
@@ -12,6 +13,8 @@ const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
 const batchSize = Math.max(1, Number(process.env.SYNC_BATCH_SIZE || '25'));
 const pollIntervalMs = Math.max(5000, Number(process.env.SYNC_INTERVAL_MS || '30000'));
 const watchMode = process.argv.includes('--watch');
+const syncTargetMode = process.env.SYNC_TARGET_MODE
+  || (businessOneDrive.isConfigured() ? 'business-onedrive' : 'filesystem');
 
 function safePathSegment(value) {
   const text = String(value || '').trim();
@@ -59,6 +62,18 @@ function ensureWritableOneDriveRoot() {
   fs.mkdirSync(oneDriveRoot, { recursive: true });
 }
 
+function ensureSyncTargetReady() {
+  if (syncTargetMode === 'business-onedrive') {
+    const unavailableReason = businessOneDrive.getUnavailableReason();
+    if (unavailableReason) {
+      throw new Error(unavailableReason);
+    }
+    return;
+  }
+
+  ensureWritableOneDriveRoot();
+}
+
 function normalizePayload(row) {
   const payload = row && typeof row.payload === 'string'
     ? JSON.parse(row.payload)
@@ -86,6 +101,8 @@ function buildFileDestination(normalized) {
   const timeParts = buildTimestampParts(normalized.timestamp);
   const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
   const fileName = sanitizeFileName(normalized.fileName || fallbackFileName);
+  const targetRelativePath = [folderSegment, timeParts.year, timeParts.month, fileName].join('/');
+  const logicalPath = [oneDrivePodRoot, targetRelativePath].filter(Boolean).join('/');
 
   const pathSegments = [oneDriveRoot];
   if (oneDrivePodRoot) {
@@ -95,11 +112,9 @@ function buildFileDestination(normalized) {
 
   const absoluteDir = path.join(...pathSegments);
   const absoluteFilePath = path.join(absoluteDir, fileName);
-  const relativePath = [oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month, fileName]
-    .filter(Boolean)
-    .join('/');
+  const relativePath = logicalPath;
 
-  return { pdfBuffer, absoluteDir, absoluteFilePath, relativePath };
+  return { pdfBuffer, absoluteDir, absoluteFilePath, relativePath, targetRelativePath };
 }
 
 async function fetchPendingRows() {
@@ -135,6 +150,13 @@ async function markRowMirrored(rowId, relativePath) {
 async function mirrorRow(row) {
   const normalized = normalizePayload(row);
   const destination = buildFileDestination(normalized);
+
+  if (syncTargetMode === 'business-onedrive') {
+    const upload = await businessOneDrive.uploadBuffer(destination.targetRelativePath, destination.pdfBuffer);
+    await markRowMirrored(normalized.rowId, upload.webUrl || upload.remotePath || destination.relativePath);
+    return upload.webUrl || upload.remotePath || destination.relativePath;
+  }
+
   fs.mkdirSync(destination.absoluteDir, { recursive: true });
   fs.writeFileSync(destination.absoluteFilePath, destination.pdfBuffer);
   await markRowMirrored(normalized.rowId, destination.relativePath);
@@ -142,11 +164,11 @@ async function mirrorRow(row) {
 }
 
 async function runOnce() {
-  ensureWritableOneDriveRoot();
+  ensureSyncTargetReady();
 
   const rows = await fetchPendingRows();
   if (!rows.length) {
-    console.log('No pending Supabase submissions to mirror.');
+    console.log(`No pending Supabase submissions to mirror for target mode: ${syncTargetMode}.`);
     return 0;
   }
 
@@ -161,7 +183,7 @@ async function runOnce() {
     }
   }
 
-  console.log(`Mirrored ${mirroredCount} of ${rows.length} pending submissions.`);
+  console.log(`Mirrored ${mirroredCount} of ${rows.length} pending submissions using ${syncTargetMode}.`);
   return mirroredCount;
 }
 

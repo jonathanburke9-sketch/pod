@@ -937,11 +937,16 @@ async function syncQueue() {
 
       const result = await response.json().catch(() => null);
       const oneDrivePath = result?.oneDrive?.relativePath;
+      const oneDrivePending = Boolean(result?.oneDrive?.pending);
       const storageLabel = result?.storage || 'server';
       const warning = result?.warning ? ` ${result.warning}` : '';
-      lastSuccessMessage = oneDrivePath
-        ? `Uploaded to ${storageLabel}: ${oneDrivePath}.${warning}`
-        : `Uploaded to ${storageLabel}.${warning || ' No folder copy was created.'}`;
+      if (oneDrivePath) {
+        lastSuccessMessage = `Uploaded to ${storageLabel}: ${oneDrivePath}.${warning}`;
+      } else if (oneDrivePending) {
+        lastSuccessMessage = `Uploaded to ${storageLabel}. Queued for Business OneDrive sync worker.${warning}`;
+      } else {
+        lastSuccessMessage = `Uploaded to ${storageLabel}.${warning || ' No folder copy was created.'}`;
+      }
     } catch (error) {
       remaining.push(item);
       lastError = error?.message || 'Network error while uploading';

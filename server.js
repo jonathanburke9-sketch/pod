@@ -22,6 +22,7 @@ const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
 const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
   ? 'POD_Uploads'
   : process.env.ONEDRIVE_POD_ROOT;
+const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE || (process.env.VERCEL ? 'worker' : 'filesystem');
 
 let supabase = null;
 if (hasSupabaseConfig) {
@@ -259,6 +260,7 @@ async function getStorageHealth() {
   return {
     ok: true,
     supabaseConfigured: hasSupabaseConfig,
+    uploadMirrorMode,
     oneDriveConfigured: Boolean(oneDriveRoot),
     oneDriveRootExists,
     oneDrivePodRoot,
@@ -461,15 +463,19 @@ const server = http.createServer(async (req, res) => {
 
       payload.folder = mappedFolder;
 
-      let oneDrive = { saved: false, reason: 'Not attempted' };
-      try {
-        oneDrive = writePdfToOneDrive(payload, mappedFolder);
-        if (oneDrive.saved) {
-          payload.podPdfPath = oneDrive.relativePath;
+      let oneDrive = uploadMirrorMode === 'worker'
+        ? { saved: false, pending: true, reason: 'Queued for sync worker' }
+        : { saved: false, reason: 'Not attempted' };
+      if (uploadMirrorMode !== 'worker') {
+        try {
+          oneDrive = writePdfToOneDrive(payload, mappedFolder);
+          if (oneDrive.saved) {
+            payload.podPdfPath = oneDrive.relativePath;
+          }
+        } catch (error) {
+          oneDrive = { saved: false, reason: error.message || 'OneDrive write failed' };
+          console.error('OneDrive mapping write failed.', oneDrive.reason);
         }
-      } catch (error) {
-        oneDrive = { saved: false, reason: error.message || 'OneDrive write failed' };
-        console.error('OneDrive mapping write failed.', oneDrive.reason);
       }
 
       let storage = 'local';
@@ -486,7 +492,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      if (!oneDrive.saved && oneDrive.reason) {
+      if (!oneDrive.saved && !oneDrive.pending && oneDrive.reason) {
         warning = warning
           ? `${warning} OneDrive copy failed: ${oneDrive.reason}`
           : `OneDrive copy failed: ${oneDrive.reason}`;

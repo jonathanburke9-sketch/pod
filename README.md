@@ -58,6 +58,14 @@ SUPABASE_ANON_KEY=your_anon_key
 
 ONEDRIVE_ROOT=C:\\Users\\<your-user>\\OneDrive
 ONEDRIVE_POD_ROOT=POD_Uploads
+UPLOAD_MIRROR_MODE=filesystem
+SYNC_TARGET_MODE=filesystem
+
+MS_TENANT_ID=your_microsoft_365_tenant_id
+MS_CLIENT_ID=your_azure_app_client_id
+MS_CLIENT_SECRET=your_azure_app_client_secret
+ONEDRIVE_DRIVE_ID=your_business_onedrive_drive_id
+
 SYNC_BATCH_SIZE=25
 SYNC_INTERVAL_MS=30000
 ```
@@ -69,6 +77,9 @@ Notes:
 - Keep `.env` out of source control.
 - `ONEDRIVE_ROOT` must point to the local synced OneDrive base folder on the server machine.
 - `ONEDRIVE_POD_ROOT` defaults to `POD_Uploads` if omitted.
+- `UPLOAD_MIRROR_MODE=worker` tells the upload API to store in Supabase first and let a separate worker mirror into OneDrive later.
+- `SYNC_TARGET_MODE=business-onedrive` tells the worker to upload into Microsoft 365 Business OneDrive through Microsoft Graph instead of a local filesystem.
+- `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, and `ONEDRIVE_DRIVE_ID` are required for Business OneDrive Graph uploads.
 - `SYNC_BATCH_SIZE` controls how many Supabase rows the worker mirrors per pass.
 - `SYNC_INTERVAL_MS` controls watch-mode polling interval for the worker.
 
@@ -211,6 +222,11 @@ Current behavior:
 - Writes the PDF into the mapped OneDrive driver folder.
 - Updates `pod_submissions.pod_pdf_url` and marks the row as `mirrored`.
 
+Worker target modes:
+
+- `filesystem`: writes into a local/synced OneDrive folder using `ONEDRIVE_ROOT`.
+- `business-onedrive`: uploads directly into Microsoft 365 Business OneDrive using Microsoft Graph.
+
 Upload response now includes storage result and OneDrive result:
 
 ```json
@@ -294,8 +310,18 @@ C:\Users\<your-user>\OneDrive\POD_Uploads\Deon\2026\07\INV-1042_20260721-083012.
 Recommended deployment shape:
 
 1. Host the app/API on Vercel for phone access.
-2. Keep Supabase as the durable upload store.
-3. Run `npm run sync:onedrive:watch` on the Windows machine that has the synced OneDrive folder.
+2. Set `UPLOAD_MIRROR_MODE=worker` on the API so uploads are accepted into Supabase without trying direct folder writes.
+3. Keep Supabase as the durable upload store.
+4. Run `npm run sync:onedrive:watch` on the machine responsible for Business OneDrive mirroring.
+
+For Microsoft 365 Business OneDrive endpoint sync:
+
+1. Register an Azure app with Microsoft Graph application permissions for Files.ReadWrite.All or the minimal drive-scoped equivalent your tenant allows.
+2. Set `SYNC_TARGET_MODE=business-onedrive` on the worker machine.
+3. Set `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, and `ONEDRIVE_DRIVE_ID`.
+4. Run `npm run sync:onedrive:watch`.
+
+In this mode, the worker uploads PDFs to the configured drive endpoint rather than writing to a local Windows folder.
 
 If the worker reports `No pending Supabase submissions to mirror.`, it means either:
 
