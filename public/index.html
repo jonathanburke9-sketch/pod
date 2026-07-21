@@ -10,7 +10,7 @@
   </head>
   <body>
     <main class="app">
-      <section class="top-nav">
+      <section id="adminNav" class="top-nav hidden">
         <a href="/admin.html">Admin</a>
       </section>
       <section class="hero">
@@ -51,6 +51,25 @@
               <span class="chip" id="queueCount">0 pending</span>
               <span class="chip" id="connectionState">Online</span>
             </div>
+          </div>
+          <div>
+            <div class="camera-wrap">
+              <video id="cameraPreview" class="preview hidden" autoplay playsinline muted></video>
+              <div id="captureGuide" class="capture-guide hidden" aria-hidden="true">
+                <span class="corner tl"></span>
+                <span class="corner tr"></span>
+                <span class="corner bl"></span>
+                <span class="corner br"></span>
+              </div>
+            </div>
+            <canvas id="canvas" class="hidden"></canvas>
+            <div class="grid" style="margin-top:12px;">
+              <button id="openCameraBtn" class="secondary">Open camera</button>
+              <button id="captureBtn">Capture scan</button>
+              <button id="removeScanBtn" class="secondary">Remove last scan</button>
+              <button id="clearScansBtn" class="secondary">Clear scans</button>
+              <button id="switchBtn" class="secondary">Switch camera</button>
+            </div>
             <section class="health-panel" aria-label="Upload health">
               <h3 id="healthTitle">Upload Health</h3>
               <div class="health-grid">
@@ -68,24 +87,6 @@
                 </div>
               </div>
             </section>
-          </div>
-          <div>
-            <div class="camera-wrap">
-              <video id="cameraPreview" class="preview" autoplay playsinline muted></video>
-              <div class="capture-guide" aria-hidden="true">
-                <span class="corner tl"></span>
-                <span class="corner tr"></span>
-                <span class="corner bl"></span>
-                <span class="corner br"></span>
-              </div>
-            </div>
-            <canvas id="canvas" class="hidden"></canvas>
-            <div class="grid" style="margin-top:12px;">
-              <button id="captureBtn">Capture scan</button>
-              <button id="removeScanBtn" class="secondary">Remove last scan</button>
-              <button id="clearScansBtn" class="secondary">Clear scans</button>
-              <button id="switchBtn" class="secondary">Switch camera</button>
-            </div>
             <p id="scanSummary" class="hint" style="margin-top:10px;">0 scans captured</p>
             <div id="scanList" class="scan-list" aria-live="polite"></div>
             <img id="capturedImage" class="preview hidden" alt="Captured invoice" />

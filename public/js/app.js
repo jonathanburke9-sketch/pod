@@ -10,14 +10,17 @@ const captureBtn = document.getElementById('captureBtn');
 const removeScanBtn = document.getElementById('removeScanBtn');
 const clearScansBtn = document.getElementById('clearScansBtn');
 const switchBtn = document.getElementById('switchBtn');
+const openCameraBtn = document.getElementById('openCameraBtn');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
+const captureGuide = document.getElementById('captureGuide');
 const canvas = document.getElementById('canvas');
 const imagePreview = document.getElementById('capturedImage');
 const scanSummary = document.getElementById('scanSummary');
 const scanList = document.getElementById('scanList');
 const statusEl = document.getElementById('status');
+const adminNav = document.getElementById('adminNav');
 const queueCount = document.getElementById('queueCount');
 const connectionState = document.getElementById('connectionState');
 const healthTitle = document.getElementById('healthTitle');
@@ -29,6 +32,7 @@ const healthLastSyncValue = document.getElementById('healthLastSyncValue');
 const healthFailedValue = document.getElementById('healthFailedValue');
 
 let stream;
+let cameraActive = false;
 let currentFacingMode = 'environment';
 let drivers = [];
 let pendingQueue = [];
@@ -270,10 +274,36 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
     video.srcObject = stream;
     await video.play();
+
+  const isAdminDevice = Boolean(boundDriver && (boundDriver.folder || '').trim().toLowerCase() === 'jonathan-admin');
+  adminNav.classList.toggle('hidden', !isAdminDevice);
+}
+
+function updateCameraUiState(isActive) {
+  cameraActive = isActive;
+  video.classList.toggle('hidden', !isActive);
+  captureGuide.classList.toggle('hidden', !isActive);
+  openCameraBtn.textContent = isActive ? 'Close camera' : 'Open camera';
+  captureBtn.disabled = !isActive;
+  switchBtn.disabled = !isActive;
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = undefined;
+  }
+  video.pause();
+  video.srcObject = null;
+  updateCameraUiState(false);
     statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
   } catch (error) {
-    statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
+async function startCamera(forceRestart = false) {
+  if (cameraActive && stream && !forceRestart) {
+    return;
   }
+
+  if (stream) {
 }
 
 function toggleConnectionStatus() {
@@ -281,8 +311,10 @@ function toggleConnectionStatus() {
   connectionState.textContent = online
     ? (settings?.ui?.connectionOnline || 'Online')
     : (settings?.ui?.connectionOffline || 'Offline');
+    updateCameraUiState(true);
 }
 
+    updateCameraUiState(false);
 function computeBrightnessAndSharpness(imageData) {
   const { data, width, height } = imageData;
   let brightnessSum = 0;
@@ -431,17 +463,6 @@ function detectDocumentBounds(imageData, width, height) {
   };
 }
 
-function guideCropBounds(width, height) {
-  const insetX = Math.round(width * 0.08);
-  const insetY = Math.round(height * 0.08);
-  return {
-    x: insetX,
-    y: insetY,
-    width: Math.max(1, width - (insetX * 2)),
-    height: Math.max(1, height - (insetY * 2))
-  };
-}
-
 function enhanceColorScan(imageData) {
   const { width, height, data } = imageData;
 
@@ -524,17 +545,15 @@ function applyEdgeDetectionFromCurrentFrame() {
   detectionContext.drawImage(canvas, 0, 0, detectionWidth, detectionHeight);
   const detectionImage = detectionContext.getImageData(0, 0, detectionWidth, detectionHeight);
   const detectedBounds = detectDocumentBounds(detectionImage, detectionWidth, detectionHeight);
-  const fallbackBounds = guideCropBounds(detectionWidth, detectionHeight);
-  const cropBounds = detectedBounds || fallbackBounds;
 
   let outputCanvas = canvas;
   let outputContext = context;
-  if (cropBounds) {
+  if (detectedBounds) {
     const mapped = {
-      x: Math.max(0, Math.round(cropBounds.x / scale)),
-      y: Math.max(0, Math.round(cropBounds.y / scale)),
-      width: Math.max(1, Math.round(cropBounds.width / scale)),
-      height: Math.max(1, Math.round(cropBounds.height / scale))
+      x: Math.max(0, Math.round(detectedBounds.x / scale)),
+      y: Math.max(0, Math.round(detectedBounds.y / scale)),
+      width: Math.max(1, Math.round(detectedBounds.width / scale)),
+      height: Math.max(1, Math.round(detectedBounds.height / scale))
     };
 
     const cropCanvas = document.createElement('canvas');
@@ -564,12 +583,16 @@ function applyEdgeDetectionFromCurrentFrame() {
   return {
     dataUrl: optimizedDataUrl,
     qualityWarnings,
-    edgeDetected: Boolean(detectedBounds),
-    guideCropped: !detectedBounds
+    edgeDetected: Boolean(detectedBounds)
   };
 }
 
 function captureInvoice() {
+  if (!cameraActive || !stream || video.readyState < 2) {
+    statusEl.textContent = 'Open camera first, then capture the scan.';
+    return;
+  }
+
   const result = applyEdgeDetectionFromCurrentFrame();
   capturedScans.push(result);
   imagePreview.src = result.dataUrl;
@@ -577,13 +600,11 @@ function captureInvoice() {
   refreshScanSummary();
 
   if (result.qualityWarnings.length) {
-    statusEl.textContent = `Color scan captured${result.edgeDetected ? ' with edge crop' : (result.guideCropped ? ' with guide crop' : '')} and warning: ${result.qualityWarnings.join(' ')}`;
+    statusEl.textContent = `Color scan captured${result.edgeDetected ? ' with edge crop' : ''} and warning: ${result.qualityWarnings.join(' ')}`;
   } else {
     statusEl.textContent = result.edgeDetected
       ? 'Color scan captured with edge detection. Add more scans if needed, then save to the queue as a PDF.'
-      : (result.guideCropped
-        ? 'Color scan captured with guide crop. Add more scans if needed, then save to the queue as a PDF.'
-        : 'Color scan captured. Add more scans if needed, then save to the queue as a PDF.');
+      : 'Color scan captured. Edge not confidently detected, so the full frame was kept. Add more scans if needed, then save to the queue as a PDF.';
   }
 }
 
@@ -926,9 +947,21 @@ async function syncQueue() {
 captureBtn.addEventListener('click', captureInvoice);
 removeScanBtn.addEventListener('click', removeLastScan);
 clearScansBtn.addEventListener('click', clearScans);
-switchBtn.addEventListener('click', async () => {
-  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+openCameraBtn.addEventListener('click', async () => {
+  if (cameraActive) {
+    stopCamera();
+    statusEl.textContent = 'Camera closed. Tap Open camera when you are ready to scan.';
+    return;
+  }
   await startCamera();
+});
+switchBtn.addEventListener('click', async () => {
+  if (!cameraActive) {
+    statusEl.textContent = 'Open camera first before switching lenses.';
+    return;
+  }
+  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+  await startCamera(true);
 });
 bindDriverBtn.addEventListener('click', bindDriverToDevice);
 submitBtn.addEventListener('click', enqueueEntry);
@@ -944,12 +977,12 @@ if ('serviceWorker' in navigator) {
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
+  updateCameraUiState(false);
   loadHealth();
   toggleConnectionStatus();
   await loadQueue();
   refreshScanSummary();
   refreshHealthPanel();
   await loadDrivers();
-  await startCamera();
   await syncQueue();
 });
