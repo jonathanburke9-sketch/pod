@@ -27,6 +27,10 @@ const powerAutomateSharedSecret = process.env.POWER_AUTOMATE_SHARED_SECRET || ''
 const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE
   || (powerAutomateUrl ? 'power-automate' : (process.env.VERCEL ? 'worker' : 'filesystem'));
 
+console.log(`Upload mirror mode: ${uploadMirrorMode}`);
+console.log(`Power Automate configured: ${Boolean(powerAutomateUrl)}`);
+console.log(`Supabase configured: ${hasSupabaseConfig}`);
+
 let supabase = null;
 if (hasSupabaseConfig) {
   try {
@@ -502,6 +506,7 @@ const server = http.createServer(async (req, res) => {
 
     const shouldProbe = url.searchParams.get('probe') === '1';
     if (!shouldProbe) {
+      console.log(`Power Automate health check requested. configured=${Boolean(powerAutomateUrl)} probe=false`);
       sendJson(res, 200, {
         ok: true,
         configured: Boolean(powerAutomateUrl),
@@ -512,6 +517,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
+      console.log(`Power Automate probe requested. configured=${Boolean(powerAutomateUrl)} probe=true`);
       const result = await probePowerAutomate();
       sendJson(res, 200, {
         ok: true,
@@ -602,24 +608,31 @@ const server = http.createServer(async (req, res) => {
 
       payload.folder = mappedFolder;
 
+      console.log(`Upload received. mirrorMode=${uploadMirrorMode} driver=${payload.driverId || 'unknown'} invoice=${payload.invoiceNumber || 'unknown'}`);
+
       let oneDrive = { saved: false, reason: 'Not attempted' };
 
       if (uploadMirrorMode === 'power-automate') {
         try {
+          console.log('Forwarding upload to Power Automate.');
           oneDrive = await sendToPowerAutomate(payload, mappedFolder);
           payload.podPdfPath = oneDrive.relativePath || oneDrive.webUrl || '';
+          console.log(`Power Automate success. path=${oneDrive.relativePath || ''} webUrl=${oneDrive.webUrl || ''}`);
         } catch (error) {
           console.error('Power Automate upload failed.', error.message);
           sendJson(res, 502, { error: error.message });
           return;
         }
       } else if (uploadMirrorMode === 'worker') {
+        console.log('Queued upload for worker mirroring.');
         oneDrive = { saved: false, pending: true, reason: 'Queued for sync worker' };
       } else {
         try {
+          console.log('Using filesystem OneDrive write path.');
           oneDrive = writePdfToOneDrive(payload, mappedFolder);
           if (oneDrive.saved) {
             payload.podPdfPath = oneDrive.relativePath;
+            console.log(`Filesystem OneDrive write success. path=${oneDrive.relativePath}`);
           }
         } catch (error) {
           oneDrive = { saved: false, reason: error.message || 'OneDrive write failed' };
@@ -633,6 +646,7 @@ const server = http.createServer(async (req, res) => {
         try {
           await writeSubmissionToSupabase(payload);
           storage = uploadMirrorMode === 'power-automate' ? 'power-automate' : 'supabase';
+          console.log(`Supabase audit row saved. storage=${storage}`);
         } catch (error) {
           warning = uploadMirrorMode === 'power-automate'
             ? 'Power Automate upload succeeded, but Supabase audit logging failed.'
