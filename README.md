@@ -4,16 +4,18 @@ POD Pulse is an offline-first proof-of-delivery app for drivers. This guide expl
 
 1. How to run the app now (current local JSON mode).
 2. How to set up Supabase in detail.
-3. How to link OneDrive folders to the driver mapping.
-4. How to migrate from local files to cloud-backed storage.
+3. How to send uploads from Vercel to Power Automate.
+4. How to link OneDrive folders to the driver mapping.
+5. How to migrate from local files to cloud-backed storage.
 
 ## Current Architecture
 
 At the moment, the running app behavior is:
 
 - Driver list API reads from `data/drivers.json`.
-- Upload API can store payloads in Supabase and optionally mirror PDFs into a local OneDrive folder.
-- A local worker can pull Supabase submissions that do not yet have a OneDrive path and write them into the mapped driver folders.
+- Upload API can forward PDFs and metadata to a Power Automate HTTP endpoint.
+- Supabase can store the audit row after the Power Automate handoff succeeds.
+- Optional worker/local mirror modes remain available for non-Vercel deployments.
 
 This README gives you the exact setup so you can switch cleanly.
 
@@ -58,6 +60,8 @@ SUPABASE_ANON_KEY=your_anon_key
 
 ONEDRIVE_ROOT=C:\\Users\\<your-user>\\OneDrive
 ONEDRIVE_POD_ROOT=POD_Uploads
+POWER_AUTOMATE_URL=https://prod-00.westeurope.logic.azure.com:443/workflows/...
+POWER_AUTOMATE_SHARED_SECRET=replace_with_shared_secret
 UPLOAD_MIRROR_MODE=filesystem
 SYNC_TARGET_MODE=filesystem
 
@@ -75,9 +79,13 @@ Notes:
 - `SUPABASE_SERVICE_ROLE_KEY` must only be used on the server.
 - Never expose service role keys to browser code.
 - Keep `.env` out of source control.
+- If a value starts with `#`, wrap it in quotes or dotenv will treat it as a comment. Example: `ADMIN_KEY="#my-secret"`.
 - `ONEDRIVE_ROOT` must point to the local synced OneDrive base folder on the server machine.
 - `ONEDRIVE_POD_ROOT` defaults to `POD_Uploads` if omitted.
+- `POWER_AUTOMATE_URL` is the HTTP trigger URL for the Power Automate flow that creates the file in OneDrive for Business.
+- `POWER_AUTOMATE_SHARED_SECRET` is an optional shared secret header sent as `x-shared-secret`.
 - `UPLOAD_MIRROR_MODE=worker` tells the upload API to store in Supabase first and let a separate worker mirror into OneDrive later.
+- `UPLOAD_MIRROR_MODE=power-automate` tells the upload API to send the PDF directly to Power Automate from the Vercel backend.
 - `SYNC_TARGET_MODE=business-onedrive` tells the worker to upload into Microsoft 365 Business OneDrive through Microsoft Graph instead of a local filesystem.
 - `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, and `ONEDRIVE_DRIVE_ID` are required for Business OneDrive Graph uploads.
 - `SYNC_BATCH_SIZE` controls how many Supabase rows the worker mirrors per pass.
@@ -210,8 +218,9 @@ Current behavior:
 3. `POST /api/upload`
 
 - Resolves mapped folder from driver mapping.
-- Writes PDF from `payload.imageData` to OneDrive path (if configured).
-- Inserts into `pod_submissions` in Supabase (if configured).
+- In `power-automate` mode, sends PDF plus metadata to a Power Automate HTTP endpoint.
+- In `filesystem` mode, writes PDF from `payload.imageData` to OneDrive path (if configured).
+- Inserts into `pod_submissions` in Supabase (if configured) after the primary destination succeeds.
 - Falls back to `data/submissions.json` when Supabase is unavailable.
 
 4. `sync-onedrive.js`
@@ -310,9 +319,44 @@ C:\Users\<your-user>\OneDrive\POD_Uploads\Deon\2026\07\INV-1042_20260721-083012.
 Recommended deployment shape:
 
 1. Host the app/API on Vercel for phone access.
-2. Set `UPLOAD_MIRROR_MODE=worker` on the API so uploads are accepted into Supabase without trying direct folder writes.
-3. Keep Supabase as the durable upload store.
-4. Run `npm run sync:onedrive:watch` on the machine responsible for Business OneDrive mirroring.
+2. Set `UPLOAD_MIRROR_MODE=power-automate` on the API.
+3. Set `POWER_AUTOMATE_URL` to the HTTP-trigger Power Automate flow.
+4. Let Power Automate create the file in OneDrive for Business.
+5. Optionally keep Supabase as the durable audit store.
+
+Suggested Power Automate request body:
+
+```json
+{
+	"driverId": "driver-002",
+	"driverName": "Deon",
+	"folder": "Deon",
+	"invoiceNumber": "INV-1042",
+	"paymentMethod": "EFT",
+	"notes": "Delivered to reception",
+	"timestamp": "2026-07-21T08:30:12.000Z",
+	"filename": "INV-1042_20260721-083012.pdf",
+	"relativePath": "POD_Uploads/Deon/2026/07/INV-1042_20260721-083012.pdf",
+	"year": "2026",
+	"month": "07",
+	"scanCount": 1,
+	"qualityWarnings": [],
+	"pdfBase64": "JVBERi0xLjQK..."
+}
+```
+
+Exact contract reference:
+
+- See `docs/power-automate-contract.md` for the upload payload, health-check payload, and expected response bodies.
+
+Backend health-check endpoint for the flow:
+
+```text
+GET /api/health/power-automate
+GET /api/health/power-automate?probe=1
+```
+
+These requests require the `x-admin-key` header.
 
 For Microsoft 365 Business OneDrive endpoint sync:
 

@@ -22,7 +22,10 @@ const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
 const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
   ? 'POD_Uploads'
   : process.env.ONEDRIVE_POD_ROOT;
-const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE || (process.env.VERCEL ? 'worker' : 'filesystem');
+const powerAutomateUrl = process.env.POWER_AUTOMATE_URL || '';
+const powerAutomateSharedSecret = process.env.POWER_AUTOMATE_SHARED_SECRET || '';
+const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE
+  || (powerAutomateUrl ? 'power-automate' : (process.env.VERCEL ? 'worker' : 'filesystem'));
 
 let supabase = null;
 if (hasSupabaseConfig) {
@@ -261,6 +264,7 @@ async function getStorageHealth() {
     ok: true,
     supabaseConfigured: hasSupabaseConfig,
     uploadMirrorMode,
+    powerAutomateConfigured: Boolean(powerAutomateUrl),
     oneDriveConfigured: Boolean(oneDriveRoot),
     oneDriveRootExists,
     oneDrivePodRoot,
@@ -339,6 +343,110 @@ function buildTimestampParts(isoTimestamp) {
   return { year, month, stamp };
 }
 
+function buildSubmissionFileMetadata(payload, mappedFolder) {
+  const folderSegment = safePathSegment(mappedFolder || payload.folder || payload.driverName || 'Unmapped');
+  const invoiceSegment = safePathSegment(payload.invoiceNumber || 'INV-unknown');
+  const timeParts = buildTimestampParts(payload.timestamp);
+  const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
+  const fileName = sanitizeFileName(payload.filename || fallbackFileName);
+  const relativePath = [oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month, fileName]
+    .filter(Boolean)
+    .join('/');
+
+  return {
+    folderSegment,
+    invoiceSegment,
+    timeParts,
+    fileName,
+    relativePath
+  };
+}
+
+async function postToPowerAutomate(requestPayload) {
+  if (!powerAutomateUrl) {
+    throw new Error('POWER_AUTOMATE_URL is not configured');
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (powerAutomateSharedSecret) {
+    headers['x-shared-secret'] = powerAutomateSharedSecret;
+  }
+
+  const response = await fetch(powerAutomateUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(requestPayload)
+  });
+
+  const rawText = await response.text();
+  let parsed = null;
+  try {
+    parsed = rawText ? JSON.parse(rawText) : null;
+  } catch (error) {
+    parsed = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Power Automate failed (${response.status}): ${rawText || 'Unknown error'}`);
+  }
+
+  return { parsed, rawText };
+}
+
+function buildPowerAutomatePayload(payload, mappedFolder) {
+  const pdfBuffer = dataUrlPdfToBuffer(payload.imageData);
+  if (!pdfBuffer) {
+    throw new Error('No PDF data URL was provided in payload.imageData');
+  }
+
+  const fileMeta = buildSubmissionFileMetadata(payload, mappedFolder);
+  return {
+    fileMeta,
+    requestPayload: {
+      driverId: payload.driverId || '',
+      driverName: payload.driverName || '',
+      folder: mappedFolder,
+      invoiceNumber: payload.invoiceNumber || '',
+      paymentMethod: payload.paymentMethod || '',
+      notes: payload.notes || '',
+      timestamp: payload.timestamp || new Date().toISOString(),
+      filename: fileMeta.fileName,
+      relativePath: fileMeta.relativePath,
+      year: fileMeta.timeParts.year,
+      month: fileMeta.timeParts.month,
+      scanCount: payload.scanCount || 0,
+      qualityWarnings: Array.isArray(payload.qualityWarnings) ? payload.qualityWarnings : [],
+      pdfBase64: pdfBuffer.toString('base64')
+    }
+  };
+}
+
+async function probePowerAutomate() {
+  const { parsed } = await postToPowerAutomate({
+    healthCheck: true,
+    source: 'pod-pulse-server',
+    timestamp: new Date().toISOString()
+  });
+
+  return {
+    ok: true,
+    response: parsed || {}
+  };
+}
+
+async function sendToPowerAutomate(payload, mappedFolder) {
+  const { fileMeta, requestPayload } = buildPowerAutomatePayload(payload, mappedFolder);
+  const { parsed } = await postToPowerAutomate(requestPayload);
+
+  return {
+    saved: true,
+    relativePath: parsed?.path || parsed?.relativePath || fileMeta.relativePath,
+    absoluteFilePath: parsed?.absoluteFilePath || '',
+    webUrl: parsed?.webUrl || '',
+    response: parsed
+  };
+}
+
 function writePdfToOneDrive(payload, mappedFolder) {
   const unavailableReason = getOneDriveUnavailableReason();
   if (unavailableReason) {
@@ -350,30 +458,22 @@ function writePdfToOneDrive(payload, mappedFolder) {
     return { saved: false, reason: 'No PDF data URL was provided in payload.imageData' };
   }
 
-  const folderSegment = safePathSegment(mappedFolder || payload.folder || payload.driverName || 'Unmapped');
-  const invoiceSegment = safePathSegment(payload.invoiceNumber || 'INV-unknown');
-  const timeParts = buildTimestampParts(payload.timestamp);
-  const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
-  const fileName = sanitizeFileName(payload.filename || fallbackFileName);
+  const fileMeta = buildSubmissionFileMetadata(payload, mappedFolder);
 
   const pathSegments = [oneDriveRoot];
   if (oneDrivePodRoot) {
     pathSegments.push(oneDrivePodRoot);
   }
-  pathSegments.push(folderSegment, timeParts.year, timeParts.month);
+  pathSegments.push(fileMeta.folderSegment, fileMeta.timeParts.year, fileMeta.timeParts.month);
   const absoluteDir = path.join(...pathSegments);
   fs.mkdirSync(absoluteDir, { recursive: true });
 
-  const absoluteFilePath = path.join(absoluteDir, fileName);
+  const absoluteFilePath = path.join(absoluteDir, fileMeta.fileName);
   fs.writeFileSync(absoluteFilePath, pdfBuffer);
-
-  const relativePath = [oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month, fileName]
-    .filter(Boolean)
-    .join('/');
 
   return {
     saved: true,
-    relativePath,
+    relativePath: fileMeta.relativePath,
     absoluteFilePath
   };
 }
@@ -392,6 +492,45 @@ const server = http.createServer(async (req, res) => {
     const health = await getStorageHealth();
     sendJson(res, 200, health);
     return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/health/power-automate') {
+    if (!isAuthorizedAdmin(req)) {
+      sendJson(res, 403, { error: 'Admin access required' });
+      return;
+    }
+
+    const shouldProbe = url.searchParams.get('probe') === '1';
+    if (!shouldProbe) {
+      sendJson(res, 200, {
+        ok: true,
+        configured: Boolean(powerAutomateUrl),
+        sharedSecretConfigured: Boolean(powerAutomateSharedSecret),
+        uploadMirrorMode
+      });
+      return;
+    }
+
+    try {
+      const result = await probePowerAutomate();
+      sendJson(res, 200, {
+        ok: true,
+        configured: Boolean(powerAutomateUrl),
+        sharedSecretConfigured: Boolean(powerAutomateSharedSecret),
+        uploadMirrorMode,
+        probe: result
+      });
+      return;
+    } catch (error) {
+      sendJson(res, 502, {
+        ok: false,
+        configured: Boolean(powerAutomateUrl),
+        sharedSecretConfigured: Boolean(powerAutomateSharedSecret),
+        uploadMirrorMode,
+        error: error.message
+      });
+      return;
+    }
   }
 
   if (req.method === 'POST' && url.pathname === '/api/admin/drivers') {
@@ -463,10 +602,20 @@ const server = http.createServer(async (req, res) => {
 
       payload.folder = mappedFolder;
 
-      let oneDrive = uploadMirrorMode === 'worker'
-        ? { saved: false, pending: true, reason: 'Queued for sync worker' }
-        : { saved: false, reason: 'Not attempted' };
-      if (uploadMirrorMode !== 'worker') {
+      let oneDrive = { saved: false, reason: 'Not attempted' };
+
+      if (uploadMirrorMode === 'power-automate') {
+        try {
+          oneDrive = await sendToPowerAutomate(payload, mappedFolder);
+          payload.podPdfPath = oneDrive.relativePath || oneDrive.webUrl || '';
+        } catch (error) {
+          console.error('Power Automate upload failed.', error.message);
+          sendJson(res, 502, { error: error.message });
+          return;
+        }
+      } else if (uploadMirrorMode === 'worker') {
+        oneDrive = { saved: false, pending: true, reason: 'Queued for sync worker' };
+      } else {
         try {
           oneDrive = writePdfToOneDrive(payload, mappedFolder);
           if (oneDrive.saved) {
@@ -478,16 +627,18 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      let storage = 'local';
+      let storage = uploadMirrorMode === 'power-automate' ? 'power-automate' : 'local';
       let warning = '';
       if (supabase) {
         try {
           await writeSubmissionToSupabase(payload);
-          storage = 'supabase';
+          storage = uploadMirrorMode === 'power-automate' ? 'power-automate' : 'supabase';
         } catch (error) {
-          warning = isSupabaseInvocationFailure(error)
-            ? 'Supabase function failed, saved locally instead.'
-            : 'Supabase unavailable, saved locally instead.';
+          warning = uploadMirrorMode === 'power-automate'
+            ? 'Power Automate upload succeeded, but Supabase audit logging failed.'
+            : (isSupabaseInvocationFailure(error)
+              ? 'Supabase function failed, saved locally instead.'
+              : 'Supabase unavailable, saved locally instead.');
           console.error('Supabase upload failed. Falling back to local file queue.', error.message);
         }
       }
@@ -498,7 +649,7 @@ const server = http.createServer(async (req, res) => {
           : `OneDrive copy failed: ${oneDrive.reason}`;
       }
 
-      if (storage !== 'supabase') {
+      if (storage !== 'supabase' && storage !== 'power-automate') {
         appendSubmissionLocally(payload);
         storage = 'local';
       }
