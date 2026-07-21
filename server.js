@@ -8,10 +8,14 @@ const os = require('os');
 const port = process.env.PORT || 3000;
 const host = process.env.HOST || '0.0.0.0';
 const publicDir = path.join(__dirname, 'public');
-const dataDir = path.join(__dirname, 'data');
+const packagedDataDir = path.join(__dirname, 'data');
+const runtimeDataDir = resolveWritableDataDir(
+  packagedDataDir,
+  process.env.DATA_DIR || path.join(os.tmpdir(), 'pod-data')
+);
 const settingsDir = path.join(__dirname, 'settings');
-const submissionsFile = path.join(dataDir, 'submissions.json');
-const driversFile = path.join(dataDir, 'drivers.json');
+const submissionsFile = path.join(runtimeDataDir, 'submissions.json');
+const driversFile = path.join(packagedDataDir, 'drivers.json');
 const adminKey = process.env.ADMIN_KEY || '';
 const hasSupabaseConfig = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
@@ -34,8 +38,33 @@ const fallbackDrivers = [
   { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
 ];
 
+function canWriteToDirectory(dirPath) {
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+    const probeFile = path.join(dirPath, `.write-test-${process.pid}-${Date.now()}`);
+    fs.writeFileSync(probeFile, 'ok');
+    fs.unlinkSync(probeFile);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function resolveWritableDataDir(primaryDir, fallbackDir) {
+  if (canWriteToDirectory(primaryDir)) {
+    return primaryDir;
+  }
+
+  if (fallbackDir && canWriteToDirectory(fallbackDir)) {
+    console.warn(`Primary data directory is read-only. Using runtime fallback at ${fallbackDir}`);
+    return fallbackDir;
+  }
+
+  return primaryDir;
+}
+
 function ensureDataFiles() {
-  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(runtimeDataDir, { recursive: true });
   if (!fs.existsSync(submissionsFile)) {
     fs.writeFileSync(submissionsFile, '[]');
   }
