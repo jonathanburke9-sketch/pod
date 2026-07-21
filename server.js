@@ -81,6 +81,11 @@ function readJsonFile(filePath, fallbackValue) {
   }
 }
 
+function readJsonArrayFile(filePath) {
+  const value = readJsonFile(filePath, []);
+  return Array.isArray(value) ? value : [];
+}
+
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     const configuredMaxMb = Number(process.env.UPLOAD_MAX_MB || '50');
@@ -212,7 +217,8 @@ async function getDriversWithFallback() {
     console.error('Failed to read drivers from Supabase. Using local fallback.', error.message);
   }
 
-  return readJsonFile(driversFile, fallbackDrivers);
+  const localDrivers = readJsonFile(driversFile, fallbackDrivers);
+  return Array.isArray(localDrivers) ? localDrivers : fallbackDrivers;
 }
 
 async function getStorageHealth() {
@@ -255,6 +261,12 @@ function sanitizeFileName(value) {
   const cleaned = safePathSegment(value || 'pod-document.pdf');
   if (cleaned.toLowerCase().endsWith('.pdf')) return cleaned;
   return `${cleaned}.pdf`;
+}
+
+function appendSubmissionLocally(payload) {
+  const existing = readJsonArrayFile(submissionsFile);
+  existing.push(payload);
+  fs.writeFileSync(submissionsFile, JSON.stringify(existing, null, 2));
 }
 
 function dataUrlPdfToBuffer(dataUrl) {
@@ -425,9 +437,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (storage !== 'supabase') {
-        const existing = readJsonFile(submissionsFile, []);
-        existing.push(payload);
-        fs.writeFileSync(submissionsFile, JSON.stringify(existing, null, 2));
+        appendSubmissionLocally(payload);
         storage = 'local';
       }
 
@@ -440,7 +450,7 @@ const server = http.createServer(async (req, res) => {
       return;
     } catch (error) {
       console.error('Upload pipeline failed.', error.message);
-      sendJson(res, 500, { error: 'Upload pipeline failed on server' });
+      sendJson(res, 500, { error: `Upload pipeline failed on server: ${error.message}` });
       return;
     }
   }
