@@ -223,6 +223,11 @@ function renderDriverState() {
     driverBadge.textContent = settings?.ui?.notLinkedLabel || 'Not linked yet';
     setupDriver.classList.remove('hidden');
   }
+
+  const isAdminDevice = Boolean(boundDriver && (boundDriver.folder || '').trim().toLowerCase() === 'jonathan-admin');
+  if (adminNav) {
+    adminNav.classList.toggle('hidden', !isAdminDevice);
+  }
 }
 
 function loadDrivers() {
@@ -265,7 +270,11 @@ function bindDriverToDevice() {
   statusEl.textContent = `Device linked to ${boundDriver ? boundDriver.name : 'driver'}.`;
 }
 
-async function startCamera() {
+async function startCamera(forceRestart = false) {
+  if (cameraActive && stream && !forceRestart) {
+    return;
+  }
+
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
   }
@@ -274,16 +283,25 @@ async function startCamera() {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
     video.srcObject = stream;
     await video.play();
-
-  const isAdminDevice = Boolean(boundDriver && (boundDriver.folder || '').trim().toLowerCase() === 'jonathan-admin');
-  adminNav.classList.toggle('hidden', !isAdminDevice);
+    updateCameraUiState(true);
+    statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
+  } catch (error) {
+    updateCameraUiState(false);
+    statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
+  }
 }
 
 function updateCameraUiState(isActive) {
   cameraActive = isActive;
-  video.classList.toggle('hidden', !isActive);
-  captureGuide.classList.toggle('hidden', !isActive);
-  openCameraBtn.textContent = isActive ? 'Close camera' : 'Open camera';
+  if (video) {
+    video.classList.toggle('hidden', !isActive);
+  }
+  if (captureGuide) {
+    captureGuide.classList.toggle('hidden', !isActive);
+  }
+  if (openCameraBtn) {
+    openCameraBtn.textContent = isActive ? 'Close camera' : 'Open camera';
+  }
   captureBtn.disabled = !isActive;
   switchBtn.disabled = !isActive;
 }
@@ -296,14 +314,6 @@ function stopCamera() {
   video.pause();
   video.srcObject = null;
   updateCameraUiState(false);
-    statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
-  } catch (error) {
-async function startCamera(forceRestart = false) {
-  if (cameraActive && stream && !forceRestart) {
-    return;
-  }
-
-  if (stream) {
 }
 
 function toggleConnectionStatus() {
@@ -311,10 +321,8 @@ function toggleConnectionStatus() {
   connectionState.textContent = online
     ? (settings?.ui?.connectionOnline || 'Online')
     : (settings?.ui?.connectionOffline || 'Offline');
-    updateCameraUiState(true);
 }
 
-    updateCameraUiState(false);
 function computeBrightnessAndSharpness(imageData) {
   const { data, width, height } = imageData;
   let brightnessSum = 0;
@@ -531,8 +539,6 @@ function applyEdgeDetectionFromCurrentFrame() {
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-  const sourceImageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
   const maxDetectionSide = 920;
   const scale = Math.min(1, maxDetectionSide / Math.max(canvas.width, canvas.height));
@@ -947,14 +953,16 @@ async function syncQueue() {
 captureBtn.addEventListener('click', captureInvoice);
 removeScanBtn.addEventListener('click', removeLastScan);
 clearScansBtn.addEventListener('click', clearScans);
-openCameraBtn.addEventListener('click', async () => {
-  if (cameraActive) {
-    stopCamera();
-    statusEl.textContent = 'Camera closed. Tap Open camera when you are ready to scan.';
-    return;
-  }
-  await startCamera();
-});
+if (openCameraBtn) {
+  openCameraBtn.addEventListener('click', async () => {
+    if (cameraActive) {
+      stopCamera();
+      statusEl.textContent = 'Camera closed. Tap Open camera when you are ready to scan.';
+      return;
+    }
+    await startCamera();
+  });
+}
 switchBtn.addEventListener('click', async () => {
   if (!cameraActive) {
     statusEl.textContent = 'Open camera first before switching lenses.';

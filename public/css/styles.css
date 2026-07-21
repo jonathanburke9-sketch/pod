@@ -269,7 +269,7 @@ button.secondary {
   font-size: 0.92rem;
 }
 
-.hidden { display: none; }
+.hidden { display: none !important; }
 
 .table {
   width: 100%;
