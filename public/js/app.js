@@ -113,6 +113,8 @@ function applyTheme(theme) {
   root.style.setProperty('--panel', theme.panel);
   root.style.setProperty('--accent', theme.accent);
   root.style.setProperty('--accent-2', theme.accent2);
+  root.style.setProperty('--accent-3', theme.accent3 || theme.accent2 || theme.accent);
+  root.style.setProperty('--accent-4', theme.accent4 || theme.accent2 || theme.accent);
   root.style.setProperty('--text', theme.text);
   root.style.setProperty('--muted', theme.muted);
   root.style.setProperty('--border', theme.border);

@@ -41,8 +41,22 @@
       "S2S"
     ]
   },
-  "activeThemePreset": "ocean",
+  "activeThemePreset": "spectrum",
   "themePresets": {
+    "spectrum": {
+      "bg": "#060606",
+      "panel": "rgba(18, 18, 18, 0.88)",
+      "accent": "#d91f6f",
+      "accent2": "#f35a1f",
+      "accent3": "#f6e300",
+      "accent4": "#1fb655",
+      "text": "#f8fafc",
+      "muted": "#d6d6d6",
+      "border": "rgba(255, 255, 255, 0.14)",
+      "formBg": "#121212",
+      "formText": "#f8fafc",
+      "secondaryButtonBg": "#1a1a1a"
+    },
     "ocean": {
       "bg": "#060816",
       "panel": "rgba(15, 23, 42, 0.92)",

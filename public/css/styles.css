@@ -1,15 +1,17 @@
 :root {
   color-scheme: dark;
-  --bg: #060816;
-  --panel: rgba(15, 23, 42, 0.92);
-  --accent: #0ea5e9;
-  --accent-2: #22d3ee;
+  --bg: #060606;
+  --panel: rgba(18, 18, 18, 0.88);
+  --accent: #d91f6f;
+  --accent-2: #f35a1f;
+  --accent-3: #f6e300;
+  --accent-4: #1fb655;
   --text: #f8fafc;
-  --muted: #94a3b8;
-  --border: rgba(148, 163, 184, 0.2);
-  --form-bg: #0f172a;
+  --muted: #d6d6d6;
+  --border: rgba(255, 255, 255, 0.14);
+  --form-bg: #121212;
   --form-text: #f8fafc;
-  --secondary-button-bg: #111827;
+  --secondary-button-bg: #1a1a1a;
 }
 
 * { box-sizing: border-box; }
@@ -17,7 +19,12 @@
 body {
   margin: 0;
   font-family: Segoe UI, Roboto, Arial, sans-serif;
-  background: radial-gradient(circle at top, #172554 0%, var(--bg) 45%, #020617 100%);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(226, 31, 43, 0.28) 0%, transparent 24%),
+    radial-gradient(circle at 76% 10%, rgba(217, 31, 111, 0.26) 0%, transparent 24%),
+    radial-gradient(circle at 74% 66%, rgba(146, 204, 56, 0.2) 0%, transparent 28%),
+    radial-gradient(circle at 22% 82%, rgba(0, 119, 200, 0.22) 0%, transparent 28%),
+    linear-gradient(180deg, #040404 0%, var(--bg) 100%);
   color: var(--text);
   min-height: 100vh;
 }
@@ -58,7 +65,7 @@ body {
   padding: 8px 12px;
   border-radius: 999px;
   font-size: 0.8rem;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent-4));
   color: white;
 }
 
@@ -96,11 +103,12 @@ textarea {
 }
 
 button {
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
   color: white;
   border: none;
   cursor: pointer;
   font-weight: 700;
+  box-shadow: 0 10px 24px rgba(217, 31, 111, 0.18);
 }
 
 button.secondary {
@@ -165,7 +173,7 @@ button.secondary {
 .scan-pill {
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(14, 165, 233, 0.18);
+  background: rgba(217, 31, 111, 0.16);
   border: 1px solid var(--border);
   color: var(--text);
   font-size: 0.78rem;
@@ -181,8 +189,8 @@ button.secondary {
 .chip {
   padding: 8px 10px;
   border-radius: 999px;
-  background: #111827;
-  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f1f5f9;
   font-size: 0.8rem;
 }
 
@@ -237,7 +245,7 @@ button.secondary {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.55);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
 }
 
 .health-panel h3 {
@@ -255,7 +263,7 @@ button.secondary {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px;
-  background: rgba(2, 6, 23, 0.5);
+  background: rgba(0, 0, 0, 0.28);
 }
 
 .health-item span {

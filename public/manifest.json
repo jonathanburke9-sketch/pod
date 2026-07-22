@@ -4,8 +4,8 @@
   "description": "Offline-safe proof of delivery capture for drivers",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#060816",
-  "theme_color": "#0ea5e9",
+  "background_color": "#060606",
+  "theme_color": "#d91f6f",
   "icons": [
     {
       "src": "/icons/icon-192.png",
