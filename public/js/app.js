@@ -293,14 +293,57 @@ async function startCamera(forceRestart = false) {
   }
 
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: currentFacingMode },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false
+    });
     video.srcObject = stream;
     await video.play();
+    await enableCameraAutoFocus(stream);
     updateCameraUiState(true);
     statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
   } catch (error) {
     updateCameraUiState(false);
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
+  }
+}
+
+async function enableCameraAutoFocus(activeStream) {
+  const track = activeStream?.getVideoTracks?.()[0];
+  if (!track || typeof track.applyConstraints !== 'function') {
+    return;
+  }
+
+  const capabilities = typeof track.getCapabilities === 'function'
+    ? track.getCapabilities()
+    : null;
+
+  const advanced = [];
+  if (Array.isArray(capabilities?.focusMode)) {
+    if (capabilities.focusMode.includes('continuous')) {
+      advanced.push({ focusMode: 'continuous' });
+    } else if (capabilities.focusMode.includes('single-shot')) {
+      advanced.push({ focusMode: 'single-shot' });
+    }
+  }
+
+  // Some devices expose focus distance but not focusMode. Zero usually maps to nearest auto-focus baseline.
+  if (capabilities && Object.prototype.hasOwnProperty.call(capabilities, 'focusDistance')) {
+    advanced.push({ focusDistance: 0 });
+  }
+
+  if (!advanced.length) {
+    return;
+  }
+
+  try {
+    await track.applyConstraints({ advanced });
+  } catch (error) {
+    // Ignore unsupported focus constraints and keep camera usable.
   }
 }
 
@@ -936,8 +979,9 @@ function createPdfDataUrl(scans, notesText = '') {
 
 function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
-  const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}${String(d.getSeconds()).padStart(2, '0')}`;
-  return `${entry.invoiceNumber}-${stamp}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
+  const dateToken = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+  const timeToken = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return `${entry.invoiceNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
 function refreshQueueCount() {
