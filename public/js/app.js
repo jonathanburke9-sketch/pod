@@ -692,17 +692,119 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
-function createPdfDataUrl(scans) {
+function escapePdfLiteral(text) {
+  return String(text || '')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+function wrapNotesForPdf(text, maxCharsPerLine, maxLines) {
+  const cleaned = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!cleaned) return [];
+
+  const words = cleaned.split(' ');
+  const lines = [];
+  let current = '';
+
+  words.forEach(word => {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= maxCharsPerLine) {
+      current = candidate;
+      return;
+    }
+
+    if (current) {
+      lines.push(current);
+    }
+    current = word;
+  });
+
+  if (current) {
+    lines.push(current);
+  }
+
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+
+  const clipped = lines.slice(0, maxLines);
+  const lastIndex = clipped.length - 1;
+  clipped[lastIndex] = `${clipped[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 3))}...`;
+  return clipped;
+}
+
+function buildNotesOverlayContent(pageWidth, pageHeight, notesText) {
+  const margin = Math.max(20, Math.round(pageWidth * 0.03));
+  const titleFontSize = Math.max(12, Math.min(18, Math.round(pageWidth * 0.016)));
+  const bodyFontSize = Math.max(10, titleFontSize - 2);
+  const lineHeight = Math.round(bodyFontSize * 1.35);
+  const maxCharsPerLine = Math.max(28, Math.floor((pageWidth - (margin * 2)) / (bodyFontSize * 0.56)));
+  const bodyLines = wrapNotesForPdf(notesText, maxCharsPerLine, 6);
+
+  if (!bodyLines.length) {
+    return '';
+  }
+
+  const boxHeight = Math.min(
+    Math.round(pageHeight * 0.34),
+    lineHeight * (bodyLines.length + 2) + margin
+  );
+  const boxWidth = Math.max(140, pageWidth - (margin * 2));
+  const boxX = margin;
+  const boxY = margin;
+  const textX = boxX + Math.round(margin * 0.6);
+  let currentY = boxY + boxHeight - Math.round(lineHeight * 1.1);
+
+  const commands = [
+    'q',
+    '0.98 0.98 1 rg',
+    '0.16 0.2 0.3 RG',
+    '1 w',
+    `${boxX} ${boxY} ${boxWidth} ${boxHeight} re`,
+    'B',
+    '0.11 0.15 0.23 rg',
+    'BT',
+    `/F1 ${titleFontSize} Tf`,
+    `1 0 0 1 ${textX} ${currentY} Tm`,
+    `(Driver Notes) Tj`,
+    'ET'
+  ];
+
+  currentY -= lineHeight;
+  bodyLines.forEach(line => {
+    commands.push('BT');
+    commands.push(`/F1 ${bodyFontSize} Tf`);
+    commands.push(`1 0 0 1 ${textX} ${currentY} Tm`);
+    commands.push(`(${escapePdfLiteral(line)}) Tj`);
+    commands.push('ET');
+    currentY -= lineHeight;
+  });
+
+  commands.push('Q');
+  return `${commands.join('\n')}\n`;
+}
+
+function createPdfDataUrl(scans, notesText = '') {
   const encoder = new TextEncoder();
   const objects = [];
 
   const pageCount = scans.length;
   const catalogObjId = 1;
   const pagesObjId = 2;
-  let nextObjId = 3;
+  const hasNotesOverlay = Boolean(String(notesText || '').trim());
+  const fontObjId = hasNotesOverlay ? 3 : null;
+  let nextObjId = hasNotesOverlay ? 4 : 3;
   const pageObjectIds = [];
 
-  scans.forEach(scan => {
+  if (hasNotesOverlay) {
+    objects[fontObjId] = {
+      text: '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+    };
+  }
+
+  scans.forEach((scan, index) => {
     const jpegBytes = dataUrlToBytes(scan.dataUrl);
     const dimensions = jpegDimensions(jpegBytes);
     const pageObjId = nextObjId;
@@ -714,14 +816,22 @@ function createPdfDataUrl(scans) {
 
     const width = Math.max(dimensions.width, 1);
     const height = Math.max(dimensions.height, 1);
-    const contentText = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ\n`;
+    const notesOverlay = hasNotesOverlay && index === 0
+      ? buildNotesOverlayContent(width, height, notesText)
+      : '';
+    const contentText = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ\n${notesOverlay}`;
+    const contentLength = encoder.encode(contentText).length;
+    const resourceParts = [`/XObject << /Im1 ${imageObjId} 0 R >>`];
+    if (hasNotesOverlay && fontObjId) {
+      resourceParts.push(`/Font << /F1 ${fontObjId} 0 R >>`);
+    }
 
     objects[pageObjId] = {
-      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im1 ${imageObjId} 0 R >> >> /Contents ${contentObjId} 0 R >>`
+      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << ${resourceParts.join(' ')} >> /Contents ${contentObjId} 0 R >>`
     };
 
     objects[contentObjId] = {
-      text: `<< /Length ${contentText.length} >>\nstream\n${contentText}endstream`
+      text: `<< /Length ${contentLength} >>\nstream\n${contentText}endstream`
     };
 
     const header = encoder.encode(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
@@ -862,7 +972,7 @@ async function enqueueEntry() {
 
   let pdfDataUrl = '';
   try {
-    pdfDataUrl = createPdfDataUrl(capturedScans);
+    pdfDataUrl = createPdfDataUrl(capturedScans, notesInput.value.trim());
   } catch (error) {
     statusEl.textContent = 'Unable to generate a PDF from captured scans. Please recapture and try again.';
     return;

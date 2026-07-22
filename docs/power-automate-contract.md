@@ -26,7 +26,12 @@ The Power Automate flow should accept this JSON body:
   "notes": "Delivered to reception",
   "timestamp": "2026-07-21T08:30:12.000Z",
   "filename": "INV-1042_20260721-083012.pdf",
-  "relativePath": "POD_Uploads/Deon/2026/07/INV-1042_20260721-083012.pdf",
+  "targetFolder": "POD_Uploads",
+  "targetFileName": "INV-1042_20260721-083012.pdf",
+  "createFolder": false,
+  "fixedFolderOnly": true,
+  "renameOnly": true,
+  "relativePath": "POD_Uploads/INV-1042_20260721-083012.pdf",
   "year": "2026",
   "month": "07",
   "scanCount": 1,
@@ -40,9 +45,9 @@ The Power Automate flow should accept this JSON body:
 The flow should:
 
 1. Parse the JSON body.
-2. Split `relativePath` or build the folder path from `folder`, `year`, and `month`.
-3. Create the target folder in OneDrive for Business if it does not exist.
-4. Decode `pdfBase64` and create the file using `filename`.
+2. Use `targetFolder` as a pre-existing fixed folder path.
+3. Do **not** create new folders when `createFolder` is `false`.
+4. Decode `pdfBase64` and create the file using `targetFileName` (rename-only behavior in that fixed folder).
 5. Return success details to the backend.
 
 ## Upload Success Response
@@ -64,6 +69,13 @@ Recognized fields:
 - `relativePath`: accepted alternative to `path`
 - `webUrl`: optional OneDrive/SharePoint link
 - `absoluteFilePath`: optional, mainly for local gateway/hybrid flows
+
+## Fixed Folder Configuration
+
+The backend can be configured with:
+
+- `POWER_AUTOMATE_TARGET_FOLDER`: fixed destination folder, e.g. `POD_Uploads` or `POD_Uploads/Inbound`
+- `POWER_AUTOMATE_FIXED_FOLDER_ONLY`: defaults to `true`; when true, backend sends `createFolder=false`, `renameOnly=true`, and sets `relativePath` to `targetFolder/targetFileName`
 
 ## Upload Failure Response
 

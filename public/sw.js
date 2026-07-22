@@ -1,13 +1,16 @@
-const CACHE_NAME = 'pod-pulse-v2';
+const CACHE_NAME = 'pod-pulse-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/admin.html',
   '/css/styles.css?v=20260721',
-  '/js/app.js?v=20260721',
+  '/js/app.js?v=20260722',
   '/js/admin.js',
   '/settings/app_settings.json',
-  '/manifest.json'
+  '/manifest.json',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', event => {

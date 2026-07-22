@@ -24,6 +24,8 @@ const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
   : process.env.ONEDRIVE_POD_ROOT;
 const powerAutomateUrl = process.env.POWER_AUTOMATE_URL || '';
 const powerAutomateSharedSecret = process.env.POWER_AUTOMATE_SHARED_SECRET || '';
+const powerAutomateTargetFolder = String(process.env.POWER_AUTOMATE_TARGET_FOLDER || '').trim();
+const powerAutomateFixedFolderOnly = String(process.env.POWER_AUTOMATE_FIXED_FOLDER_ONLY || 'true').toLowerCase() !== 'false';
 const isVercelRuntime = Boolean(process.env.VERCEL);
 const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE
   || (isVercelRuntime ? 'power-automate' : (powerAutomateUrl ? 'power-automate' : 'filesystem'));
@@ -277,6 +279,8 @@ async function getStorageHealth() {
     uploadMirrorMode,
     powerAutomateConfigured: Boolean(powerAutomateUrl),
     powerAutomateConfigError,
+    powerAutomateTargetFolder,
+    powerAutomateFixedFolderOnly,
     oneDriveConfigured: Boolean(oneDriveRoot),
     oneDriveRootExists,
     oneDrivePodRoot,
@@ -412,6 +416,14 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
   }
 
   const fileMeta = buildSubmissionFileMetadata(payload, mappedFolder);
+  const folderParts = [powerAutomateTargetFolder || oneDrivePodRoot]
+    .flatMap(part => String(part || '').split('/'))
+    .flatMap(part => part.split('\\'))
+    .map(part => part.trim())
+    .filter(Boolean);
+  const targetFolder = folderParts.join('/');
+  const fixedRelativePath = targetFolder ? `${targetFolder}/${fileMeta.fileName}` : fileMeta.fileName;
+
   return {
     fileMeta,
     requestPayload: {
@@ -423,7 +435,12 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
       notes: payload.notes || '',
       timestamp: payload.timestamp || new Date().toISOString(),
       filename: fileMeta.fileName,
-      relativePath: fileMeta.relativePath,
+      targetFolder,
+      targetFileName: fileMeta.fileName,
+      createFolder: !powerAutomateFixedFolderOnly,
+      fixedFolderOnly: powerAutomateFixedFolderOnly,
+      renameOnly: powerAutomateFixedFolderOnly,
+      relativePath: powerAutomateFixedFolderOnly ? fixedRelativePath : fileMeta.relativePath,
       year: fileMeta.timeParts.year,
       month: fileMeta.timeParts.month,
       scanCount: payload.scanCount || 0,
