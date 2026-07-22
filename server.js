@@ -24,12 +24,19 @@ const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
   : process.env.ONEDRIVE_POD_ROOT;
 const powerAutomateUrl = process.env.POWER_AUTOMATE_URL || '';
 const powerAutomateSharedSecret = process.env.POWER_AUTOMATE_SHARED_SECRET || '';
+const isVercelRuntime = Boolean(process.env.VERCEL);
 const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE
-  || (powerAutomateUrl ? 'power-automate' : (process.env.VERCEL ? 'worker' : 'filesystem'));
+  || (isVercelRuntime ? 'power-automate' : (powerAutomateUrl ? 'power-automate' : 'filesystem'));
+const powerAutomateConfigError = uploadMirrorMode === 'power-automate' && !powerAutomateUrl
+  ? 'UPLOAD_MIRROR_MODE is power-automate but POWER_AUTOMATE_URL is missing.'
+  : '';
 
 console.log(`Upload mirror mode: ${uploadMirrorMode}`);
 console.log(`Power Automate configured: ${Boolean(powerAutomateUrl)}`);
 console.log(`Supabase configured: ${hasSupabaseConfig}`);
+if (powerAutomateConfigError) {
+  console.error(powerAutomateConfigError);
+}
 
 let supabase = null;
 if (hasSupabaseConfig) {
@@ -269,6 +276,7 @@ async function getStorageHealth() {
     supabaseConfigured: hasSupabaseConfig,
     uploadMirrorMode,
     powerAutomateConfigured: Boolean(powerAutomateUrl),
+    powerAutomateConfigError,
     oneDriveConfigured: Boolean(oneDriveRoot),
     oneDriveRootExists,
     oneDrivePodRoot,
@@ -581,6 +589,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/upload') {
+    if (powerAutomateConfigError) {
+      sendJson(res, 500, { error: powerAutomateConfigError });
+      return;
+    }
+
     let payload;
     try {
       payload = await parseJsonBody(req);
