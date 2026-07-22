@@ -11,6 +11,7 @@ const removeScanBtn = document.getElementById('removeScanBtn');
 const clearScansBtn = document.getElementById('clearScansBtn');
 const switchBtn = document.getElementById('switchBtn');
 const openCameraBtn = document.getElementById('openCameraBtn');
+const edgeCropToggle = document.getElementById('edgeCropToggle');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
@@ -38,6 +39,7 @@ let drivers = [];
 let pendingQueue = [];
 let capturedScans = [];
 let boundDriverId = localStorage.getItem('pod-device-driver') || '';
+let autoEdgeCropEnabled = localStorage.getItem('pod-auto-edge-crop') === '1';
 let settings = null;
 let invoiceRegex = /^INV-\d{4}$/i;
 let health = {
@@ -189,6 +191,14 @@ function refreshHealthPanel() {
   healthLastSyncValue.textContent = formatSyncTime(health.lastSyncAt || '');
 }
 
+function setAutoEdgeCropEnabled(enabled) {
+  autoEdgeCropEnabled = Boolean(enabled);
+  localStorage.setItem('pod-auto-edge-crop', autoEdgeCropEnabled ? '1' : '0');
+  if (edgeCropToggle) {
+    edgeCropToggle.checked = autoEdgeCropEnabled;
+  }
+}
+
 async function loadSettings() {
   const response = await fetch('/settings/app_settings.json');
   settings = await response.json();
@@ -196,6 +206,7 @@ async function loadSettings() {
   applyUiSettings(settings.ui);
   applyPaymentOptions(settings.form);
   setupValidation(settings.form);
+  setAutoEdgeCropEnabled(autoEdgeCropEnabled);
 }
 
 function getBoundDriver() {
@@ -536,27 +547,31 @@ function optimizeScanCanvas(sourceCanvas) {
   return optimizedCanvas.toDataURL('image/jpeg', jpegQuality);
 }
 
-function applyEdgeDetectionFromCurrentFrame() {
+function processScanFromCurrentFrame(useEdgeCrop) {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const maxDetectionSide = 920;
-  const scale = Math.min(1, maxDetectionSide / Math.max(canvas.width, canvas.height));
-  const detectionWidth = Math.max(1, Math.round(canvas.width * scale));
-  const detectionHeight = Math.max(1, Math.round(canvas.height * scale));
-  const detectionCanvas = document.createElement('canvas');
-  detectionCanvas.width = detectionWidth;
-  detectionCanvas.height = detectionHeight;
-  const detectionContext = detectionCanvas.getContext('2d');
-  detectionContext.drawImage(canvas, 0, 0, detectionWidth, detectionHeight);
-  const detectionImage = detectionContext.getImageData(0, 0, detectionWidth, detectionHeight);
-  const detectedBounds = detectDocumentBounds(detectionImage, detectionWidth, detectionHeight);
+  let detectedBounds = null;
+  let scale = 1;
+  if (useEdgeCrop) {
+    const maxDetectionSide = 920;
+    scale = Math.min(1, maxDetectionSide / Math.max(canvas.width, canvas.height));
+    const detectionWidth = Math.max(1, Math.round(canvas.width * scale));
+    const detectionHeight = Math.max(1, Math.round(canvas.height * scale));
+    const detectionCanvas = document.createElement('canvas');
+    detectionCanvas.width = detectionWidth;
+    detectionCanvas.height = detectionHeight;
+    const detectionContext = detectionCanvas.getContext('2d');
+    detectionContext.drawImage(canvas, 0, 0, detectionWidth, detectionHeight);
+    const detectionImage = detectionContext.getImageData(0, 0, detectionWidth, detectionHeight);
+    detectedBounds = detectDocumentBounds(detectionImage, detectionWidth, detectionHeight);
+  }
 
   let outputCanvas = canvas;
   let outputContext = context;
-  if (detectedBounds) {
+  if (useEdgeCrop && detectedBounds) {
     const mapped = {
       x: Math.max(0, Math.round(detectedBounds.x / scale)),
       y: Math.max(0, Math.round(detectedBounds.y / scale)),
@@ -591,7 +606,8 @@ function applyEdgeDetectionFromCurrentFrame() {
   return {
     dataUrl: optimizedDataUrl,
     qualityWarnings,
-    edgeDetected: Boolean(detectedBounds)
+    edgeDetected: Boolean(detectedBounds),
+    edgeCropRequested: Boolean(useEdgeCrop)
   };
 }
 
@@ -601,14 +617,22 @@ function captureInvoice() {
     return;
   }
 
-  const result = applyEdgeDetectionFromCurrentFrame();
+  const result = processScanFromCurrentFrame(autoEdgeCropEnabled);
   capturedScans.push(result);
   imagePreview.src = result.dataUrl;
   imagePreview.classList.remove('hidden');
   refreshScanSummary();
 
   if (result.qualityWarnings.length) {
-    statusEl.textContent = `Color scan captured${result.edgeDetected ? ' with edge crop' : ''} and warning: ${result.qualityWarnings.join(' ')}`;
+    if (result.edgeCropRequested && result.edgeDetected) {
+      statusEl.textContent = `Color scan captured with edge crop and warning: ${result.qualityWarnings.join(' ')}`;
+    } else if (result.edgeCropRequested) {
+      statusEl.textContent = `Color scan captured without edge crop (edge not detected) and warning: ${result.qualityWarnings.join(' ')}`;
+    } else {
+      statusEl.textContent = `Color scan captured (full frame) and warning: ${result.qualityWarnings.join(' ')}`;
+    }
+  } else if (!result.edgeCropRequested) {
+    statusEl.textContent = 'Color scan captured in full-frame mode. Add more scans if needed, then save to the queue as a PDF.';
   } else {
     statusEl.textContent = result.edgeDetected
       ? 'Color scan captured with edge detection. Add more scans if needed, then save to the queue as a PDF.'
@@ -737,48 +761,42 @@ function wrapNotesForPdf(text, maxCharsPerLine, maxLines) {
   return clipped;
 }
 
-function buildNotesOverlayContent(pageWidth, pageHeight, notesText) {
-  const margin = Math.max(20, Math.round(pageWidth * 0.03));
-  const titleFontSize = Math.max(12, Math.min(18, Math.round(pageWidth * 0.016)));
-  const bodyFontSize = Math.max(10, titleFontSize - 2);
-  const lineHeight = Math.round(bodyFontSize * 1.35);
-  const maxCharsPerLine = Math.max(28, Math.floor((pageWidth - (margin * 2)) / (bodyFontSize * 0.56)));
-  const bodyLines = wrapNotesForPdf(notesText, maxCharsPerLine, 6);
+function buildNotesPageContent(pageWidth, pageHeight, notesText) {
+  const marginX = 54;
+  const marginTop = 72;
+  const titleFontSize = 22;
+  const bodyFontSize = 13;
+  const lineHeight = 20;
+  const maxCharsPerLine = Math.max(40, Math.floor((pageWidth - (marginX * 2)) / 7.2));
+  const bodyLines = wrapNotesForPdf(notesText, maxCharsPerLine, 80);
 
   if (!bodyLines.length) {
     return '';
   }
 
-  const boxHeight = Math.min(
-    Math.round(pageHeight * 0.34),
-    lineHeight * (bodyLines.length + 2) + margin
-  );
-  const boxWidth = Math.max(140, pageWidth - (margin * 2));
-  const boxX = margin;
-  const boxY = margin;
-  const textX = boxX + Math.round(margin * 0.6);
-  let currentY = boxY + boxHeight - Math.round(lineHeight * 1.1);
+  let currentY = pageHeight - marginTop;
 
   const commands = [
     'q',
-    '0.98 0.98 1 rg',
-    '0.16 0.2 0.3 RG',
-    '1 w',
-    `${boxX} ${boxY} ${boxWidth} ${boxHeight} re`,
-    'B',
-    '0.11 0.15 0.23 rg',
+    '1 1 1 rg',
+    `0 0 ${pageWidth} ${pageHeight} re`,
+    'f',
+    '0 0 0 rg',
     'BT',
     `/F1 ${titleFontSize} Tf`,
-    `1 0 0 1 ${textX} ${currentY} Tm`,
+    `1 0 0 1 ${marginX} ${currentY} Tm`,
     `(Driver Notes) Tj`,
     'ET'
   ];
 
-  currentY -= lineHeight;
+  currentY -= 34;
   bodyLines.forEach(line => {
+    if (currentY < 50) {
+      return;
+    }
     commands.push('BT');
     commands.push(`/F1 ${bodyFontSize} Tf`);
-    commands.push(`1 0 0 1 ${textX} ${currentY} Tm`);
+    commands.push(`1 0 0 1 ${marginX} ${currentY} Tm`);
     commands.push(`(${escapePdfLiteral(line)}) Tj`);
     commands.push('ET');
     currentY -= lineHeight;
@@ -792,21 +810,21 @@ function createPdfDataUrl(scans, notesText = '') {
   const encoder = new TextEncoder();
   const objects = [];
 
-  const pageCount = scans.length;
+  const trimmedNotes = String(notesText || '').trim();
+  const hasNotesPage = Boolean(trimmedNotes);
   const catalogObjId = 1;
   const pagesObjId = 2;
-  const hasNotesOverlay = Boolean(String(notesText || '').trim());
-  const fontObjId = hasNotesOverlay ? 3 : null;
-  let nextObjId = hasNotesOverlay ? 4 : 3;
+  const fontObjId = hasNotesPage ? 3 : null;
+  let nextObjId = hasNotesPage ? 4 : 3;
   const pageObjectIds = [];
 
-  if (hasNotesOverlay) {
+  if (hasNotesPage) {
     objects[fontObjId] = {
       text: '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
     };
   }
 
-  scans.forEach((scan, index) => {
+  scans.forEach(scan => {
     const jpegBytes = dataUrlToBytes(scan.dataUrl);
     const dimensions = jpegDimensions(jpegBytes);
     const pageObjId = nextObjId;
@@ -818,18 +836,11 @@ function createPdfDataUrl(scans, notesText = '') {
 
     const width = Math.max(dimensions.width, 1);
     const height = Math.max(dimensions.height, 1);
-    const notesOverlay = hasNotesOverlay && index === 0
-      ? buildNotesOverlayContent(width, height, notesText)
-      : '';
-    const contentText = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ\n${notesOverlay}`;
+    const contentText = `q\n${width} 0 0 ${height} 0 0 cm\n/Im1 Do\nQ\n`;
     const contentLength = encoder.encode(contentText).length;
-    const resourceParts = [`/XObject << /Im1 ${imageObjId} 0 R >>`];
-    if (hasNotesOverlay && fontObjId) {
-      resourceParts.push(`/Font << /F1 ${fontObjId} 0 R >>`);
-    }
 
     objects[pageObjId] = {
-      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << ${resourceParts.join(' ')} >> /Contents ${contentObjId} 0 R >>`
+      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im1 ${imageObjId} 0 R >> >> /Contents ${contentObjId} 0 R >>`
     };
 
     objects[contentObjId] = {
@@ -845,8 +856,28 @@ function createPdfDataUrl(scans, notesText = '') {
     objects[imageObjId] = { bytes: streamBytes };
   });
 
+  if (hasNotesPage && fontObjId) {
+    const notesPageObjId = nextObjId;
+    const notesContentObjId = nextObjId + 1;
+    nextObjId += 2;
+
+    const notesWidth = 595;
+    const notesHeight = 842;
+    const notesContent = buildNotesPageContent(notesWidth, notesHeight, trimmedNotes);
+    const notesLength = encoder.encode(notesContent).length;
+
+    pageObjectIds.push(notesPageObjId);
+    objects[notesPageObjId] = {
+      text: `<< /Type /Page /Parent ${pagesObjId} 0 R /MediaBox [0 0 ${notesWidth} ${notesHeight}] /Resources << /Font << /F1 ${fontObjId} 0 R >> >> /Contents ${notesContentObjId} 0 R >>`
+    };
+    objects[notesContentObjId] = {
+      text: `<< /Length ${notesLength} >>\nstream\n${notesContent}endstream`
+    };
+  }
+
   objects[catalogObjId] = { text: `<< /Type /Catalog /Pages ${pagesObjId} 0 R >>` };
   const kids = pageObjectIds.map(id => `${id} 0 R`).join(' ');
+  const pageCount = pageObjectIds.length;
   objects[pagesObjId] = { text: `<< /Type /Pages /Count ${pageCount} /Kids [ ${kids} ] >>` };
 
   const chunks = [];
@@ -1079,6 +1110,15 @@ async function syncQueue() {
 captureBtn.addEventListener('click', captureInvoice);
 removeScanBtn.addEventListener('click', removeLastScan);
 clearScansBtn.addEventListener('click', clearScans);
+if (edgeCropToggle) {
+  edgeCropToggle.checked = autoEdgeCropEnabled;
+  edgeCropToggle.addEventListener('change', event => {
+    setAutoEdgeCropEnabled(Boolean(event.target.checked));
+    statusEl.textContent = autoEdgeCropEnabled
+      ? 'Auto edge crop is on. Disable it anytime if an invoice gets cut.'
+      : 'Auto edge crop is off. Full-frame scans are now used.';
+  });
+}
 if (openCameraBtn) {
   openCameraBtn.addEventListener('click', async () => {
     if (cameraActive) {

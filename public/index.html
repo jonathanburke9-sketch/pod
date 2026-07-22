@@ -7,7 +7,7 @@
     <title>POD Pulse</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/css/styles.css?v=20260722" />
+    <link rel="stylesheet" href="/css/styles.css?v=20260723" />
   </head>
   <body>
     <main class="app">
@@ -71,6 +71,10 @@
               <button id="clearScansBtn" class="secondary">Clear scans</button>
               <button id="switchBtn" class="secondary">Switch camera</button>
             </div>
+            <label class="toggle-row" style="margin-top:10px;">
+              <input id="edgeCropToggle" type="checkbox" />
+              <span>Auto edge crop (disable to prevent cutting)</span>
+            </label>
             <section class="health-panel" aria-label="Upload health">
               <h3 id="healthTitle">Upload Health</h3>
               <div class="health-grid">
@@ -104,6 +108,6 @@
       </section>
     </main>
 
-    <script src="/js/app.js?v=20260722"></script>
+    <script src="/js/app.js?v=20260723"></script>
   </body>
 </html>
