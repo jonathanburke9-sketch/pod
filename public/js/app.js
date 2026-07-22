@@ -980,7 +980,7 @@ function createPdfDataUrl(scans, notesText = '') {
 function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
   const dateToken = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
-  const timeToken = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const timeToken = `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
   return `${entry.invoiceNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
