@@ -21,8 +21,29 @@
         resolve(cvRef);
       }
 
+      function waitForRuntimeReady(maxMs) {
+        const started = Date.now();
+        const tick = () => {
+          if (window.cv && typeof window.cv.Mat === 'function') {
+            finish(window.cv);
+            return;
+          }
+          if (Date.now() - started > maxMs) {
+            reject(new Error('OpenCV runtime did not initialize in time'));
+            return;
+          }
+          window.setTimeout(tick, 60);
+        };
+        tick();
+      }
+
       if (window.cv && typeof window.cv === 'object') {
+        if (typeof window.cv.Mat === 'function') {
+          finish(window.cv);
+          return;
+        }
         window.cv.onRuntimeInitialized = () => finish(window.cv);
+        waitForRuntimeReady(10000);
         return;
       }
 
@@ -34,7 +55,12 @@
           reject(new Error('OpenCV script loaded but cv is unavailable'));
           return;
         }
+        if (typeof window.cv.Mat === 'function') {
+          finish(window.cv);
+          return;
+        }
         window.cv.onRuntimeInitialized = () => finish(window.cv);
+        waitForRuntimeReady(10000);
       };
       script.onerror = () => reject(new Error('Failed to load OpenCV.js'));
       document.head.appendChild(script);
