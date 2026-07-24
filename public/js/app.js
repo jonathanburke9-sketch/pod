@@ -11,6 +11,11 @@ const removeScanBtn = document.getElementById('removeScanBtn');
 const clearScansBtn = document.getElementById('clearScansBtn');
 const switchBtn = document.getElementById('switchBtn');
 const openCameraBtn = document.getElementById('openCameraBtn');
+const nativeCameraInput = document.getElementById('nativeCameraInput');
+const nativeReviewPanel = document.getElementById('nativeReviewPanel');
+const nativeReviewCanvas = document.getElementById('nativeReviewCanvas');
+const nativeReviewApplyBtn = document.getElementById('nativeReviewApplyBtn');
+const nativeReviewRetakeBtn = document.getElementById('nativeReviewRetakeBtn');
 const edgeCropToggle = document.getElementById('edgeCropToggle');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
@@ -51,6 +56,10 @@ let activeFunctionConfig = null;
 let dynamicFieldInputs = {};
 let scannerEngine = null;
 let autoCaptureLock = false;
+let nativeSourceCanvas = null;
+let nativeReviewHandles = [];
+let nativeReviewScale = 1;
+let nativeDraggedHandleIndex = -1;
 let health = {
   failedUploads: 0,
   lastSyncAt: ''
@@ -961,6 +970,243 @@ async function captureInvoice(isAutoCapture = false) {
   }
 }
 
+async function ensureScannerForStillProcessing() {
+  if (scannerEngine) {
+    return scannerEngine;
+  }
+
+  if (!window.DocScanner) {
+    return null;
+  }
+
+  const scannerConfig = settings?.scanner || {};
+  try {
+    const engine = await window.DocScanner.create({
+      video,
+      overlayCanvas: edgeOverlay,
+      minFocusScore: Number(scannerConfig.minFocusScore || 120),
+      minAreaRatio: Number(scannerConfig.minAreaRatio || 0.2),
+      requiredStableFrames: Number(scannerConfig.requiredStableFrames || 10),
+      autoCaptureCooldownMs: Number(scannerConfig.autoCaptureCooldownMs || 1800)
+    });
+    return engine;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function loadImageFileToCanvas(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = image.naturalWidth || image.width;
+      canvasEl.height = image.naturalHeight || image.height;
+      const ctx = canvasEl.getContext('2d');
+      ctx.drawImage(image, 0, 0, canvasEl.width, canvasEl.height);
+      URL.revokeObjectURL(url);
+      resolve(canvasEl);
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Could not decode native camera image'));
+    };
+
+    image.src = url;
+  });
+}
+
+function hideNativeReviewPanel() {
+  if (nativeReviewPanel) {
+    nativeReviewPanel.classList.add('hidden');
+  }
+  nativeSourceCanvas = null;
+  nativeReviewHandles = [];
+  nativeDraggedHandleIndex = -1;
+}
+
+function sourceToReviewPoint(point) {
+  return {
+    x: point.x * nativeReviewScale,
+    y: point.y * nativeReviewScale
+  };
+}
+
+function reviewToSourcePoint(point) {
+  return {
+    x: point.x / nativeReviewScale,
+    y: point.y / nativeReviewScale
+  };
+}
+
+function getCanvasPointer(event) {
+  const rect = nativeReviewCanvas.getBoundingClientRect();
+  const clientX = event.touches?.[0]?.clientX ?? event.clientX;
+  const clientY = event.touches?.[0]?.clientY ?? event.clientY;
+  return {
+    x: ((clientX - rect.left) / Math.max(rect.width, 1)) * nativeReviewCanvas.width,
+    y: ((clientY - rect.top) / Math.max(rect.height, 1)) * nativeReviewCanvas.height
+  };
+}
+
+function findNativeHandleAt(point) {
+  const threshold = 24;
+  for (let i = 0; i < nativeReviewHandles.length; i += 1) {
+    const h = nativeReviewHandles[i];
+    if (Math.hypot(point.x - h.x, point.y - h.y) <= threshold) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function clampNativePoint(point) {
+  return {
+    x: Math.max(0, Math.min(nativeReviewCanvas.width, point.x)),
+    y: Math.max(0, Math.min(nativeReviewCanvas.height, point.y))
+  };
+}
+
+function renderNativeReviewOverlay() {
+  if (!nativeReviewCanvas || !nativeSourceCanvas || nativeReviewHandles.length !== 4) return;
+
+  const ctx = nativeReviewCanvas.getContext('2d');
+  ctx.clearRect(0, 0, nativeReviewCanvas.width, nativeReviewCanvas.height);
+  ctx.drawImage(nativeSourceCanvas, 0, 0, nativeReviewCanvas.width, nativeReviewCanvas.height);
+
+  ctx.strokeStyle = '#22c55e';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(nativeReviewHandles[0].x, nativeReviewHandles[0].y);
+  ctx.lineTo(nativeReviewHandles[1].x, nativeReviewHandles[1].y);
+  ctx.lineTo(nativeReviewHandles[2].x, nativeReviewHandles[2].y);
+  ctx.lineTo(nativeReviewHandles[3].x, nativeReviewHandles[3].y);
+  ctx.closePath();
+  ctx.stroke();
+
+  nativeReviewHandles.forEach((point, index) => {
+    ctx.fillStyle = index === nativeDraggedHandleIndex ? '#16a34a' : '#22c55e';
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0b3d1e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+}
+
+function setupNativeReviewInteractions() {
+  if (!nativeReviewCanvas) return;
+
+  const startDrag = event => {
+    if (nativeReviewHandles.length !== 4) return;
+    const pointer = getCanvasPointer(event);
+    nativeDraggedHandleIndex = findNativeHandleAt(pointer);
+    if (nativeDraggedHandleIndex >= 0) {
+      event.preventDefault();
+      renderNativeReviewOverlay();
+    }
+  };
+
+  const moveDrag = event => {
+    if (nativeDraggedHandleIndex < 0) return;
+    const pointer = clampNativePoint(getCanvasPointer(event));
+    nativeReviewHandles[nativeDraggedHandleIndex] = pointer;
+    event.preventDefault();
+    renderNativeReviewOverlay();
+  };
+
+  const endDrag = () => {
+    nativeDraggedHandleIndex = -1;
+    renderNativeReviewOverlay();
+  };
+
+  nativeReviewCanvas.addEventListener('mousedown', startDrag);
+  nativeReviewCanvas.addEventListener('mousemove', moveDrag);
+  window.addEventListener('mouseup', endDrag);
+  nativeReviewCanvas.addEventListener('touchstart', startDrag, { passive: false });
+  nativeReviewCanvas.addEventListener('touchmove', moveDrag, { passive: false });
+  window.addEventListener('touchend', endDrag, { passive: true });
+}
+
+async function handleNativeCameraCapture(file) {
+  if (!file) return;
+
+  const scanner = await ensureScannerForStillProcessing();
+  if (!scanner || typeof scanner.detectQuadFromCanvas !== 'function') {
+    statusEl.textContent = 'Scanner enhancement is unavailable. Please try again.';
+    return;
+  }
+
+  try {
+    const sourceCanvas = await loadImageFileToCanvas(file);
+    const detected = await scanner.detectQuadFromCanvas(sourceCanvas);
+    if (!detected.ok) {
+      statusEl.textContent = detected.reason || 'Could not analyze captured photo.';
+      return;
+    }
+
+    nativeSourceCanvas = sourceCanvas;
+    const maxPreviewWidth = Math.min(900, sourceCanvas.width);
+    nativeReviewScale = maxPreviewWidth / Math.max(sourceCanvas.width, 1);
+    const previewWidth = Math.max(1, Math.round(sourceCanvas.width * nativeReviewScale));
+    const previewHeight = Math.max(1, Math.round(sourceCanvas.height * nativeReviewScale));
+
+    nativeReviewCanvas.width = previewWidth;
+    nativeReviewCanvas.height = previewHeight;
+    nativeReviewHandles = (detected.quad || []).map(sourceToReviewPoint);
+
+    if (nativeReviewHandles.length !== 4) {
+      hideNativeReviewPanel();
+      statusEl.textContent = 'Could not initialize edge handles. Please retake photo.';
+      return;
+    }
+
+    nativeReviewPanel.classList.remove('hidden');
+    renderNativeReviewOverlay();
+    statusEl.textContent = 'Adjust corners manually if needed, then tap Use this scan.';
+  } catch (error) {
+    statusEl.textContent = `Native capture failed: ${error.message || 'Unknown error'}`;
+  }
+}
+
+async function applyNativeReviewScan() {
+  if (!nativeSourceCanvas || nativeReviewHandles.length !== 4) {
+    statusEl.textContent = 'No native photo is ready to process.';
+    return;
+  }
+
+  const scanner = await ensureScannerForStillProcessing();
+  if (!scanner || typeof scanner.processCanvasWithQuad !== 'function') {
+    statusEl.textContent = 'Scanner enhancement is unavailable. Please retake photo.';
+    return;
+  }
+
+  const sourceQuad = nativeReviewHandles.map(reviewToSourcePoint);
+  const scanned = await scanner.processCanvasWithQuad(nativeSourceCanvas, sourceQuad);
+  if (!scanned.ok) {
+    statusEl.textContent = scanned.reason || 'Capture rejected. Please retake photo.';
+    return;
+  }
+
+  capturedScans.push({
+    dataUrl: scanned.dataUrl,
+    qualityWarnings: [],
+    edgeDetected: true,
+    edgeCropRequested: true,
+    focusScore: scanned.focusScore
+  });
+
+  imagePreview.src = scanned.dataUrl;
+  imagePreview.classList.remove('hidden');
+  refreshScanSummary();
+  hideNativeReviewPanel();
+  statusEl.textContent = 'Scan accepted. Return to form details and tap Save to offline queue.';
+}
+
 function removeLastScan() {
   if (!capturedScans.length) {
     statusEl.textContent = 'No scans to remove.';
@@ -1482,19 +1728,32 @@ if (openCameraBtn) {
   openCameraBtn.addEventListener('click', async () => {
     if (cameraActive) {
       stopCamera();
-      statusEl.textContent = 'Camera closed. Tap Open camera when you are ready to scan.';
-      return;
     }
-    await startCamera();
+    if (nativeCameraInput) {
+      nativeCameraInput.click();
+    }
+  });
+}
+if (nativeCameraInput) {
+  nativeCameraInput.addEventListener('change', async event => {
+    const file = event.target?.files?.[0] || null;
+    await handleNativeCameraCapture(file);
+    nativeCameraInput.value = '';
+  });
+}
+if (nativeReviewApplyBtn) {
+  nativeReviewApplyBtn.addEventListener('click', applyNativeReviewScan);
+}
+if (nativeReviewRetakeBtn) {
+  nativeReviewRetakeBtn.addEventListener('click', () => {
+    hideNativeReviewPanel();
+    if (nativeCameraInput) {
+      nativeCameraInput.click();
+    }
   });
 }
 switchBtn.addEventListener('click', async () => {
-  if (!cameraActive) {
-    statusEl.textContent = 'Open camera first before switching lenses.';
-    return;
-  }
-  currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-  await startCamera(true);
+  statusEl.textContent = 'Switch is available in live mode only. Native camera app controls lens selection.';
 });
 bindDriverBtn.addEventListener('click', bindDriverToDevice);
 submitBtn.addEventListener('click', enqueueEntry);
@@ -1511,6 +1770,8 @@ if ('serviceWorker' in navigator) {
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
   updateCameraUiState(false);
+  setupNativeReviewInteractions();
+  hideNativeReviewPanel();
   loadHealth();
   toggleConnectionStatus();
   await loadQueue();

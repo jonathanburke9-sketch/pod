@@ -253,6 +253,24 @@ button.secondary {
   border-radius: 18px;
 }
 
+.native-review {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.native-review h3 {
+  margin: 0 0 6px;
+  font-size: 0.96rem;
+}
+
+.native-review-canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+
 .toggle-row {
   display: inline-flex;
   align-items: center;
