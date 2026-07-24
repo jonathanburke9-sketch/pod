@@ -51,6 +51,7 @@ let activeFunctionConfig = null;
 let dynamicFieldInputs = {};
 let scannerEngine = null;
 let autoCaptureLock = false;
+let cameraStarting = false;
 let health = {
   failedUploads: 0,
   lastSyncAt: ''
@@ -464,8 +465,22 @@ function bindDriverToDevice() {
 }
 
 async function startCamera(forceRestart = false) {
+  if (cameraStarting) {
+    return;
+  }
+
   if (cameraActive && stream && !forceRestart) {
     return;
+  }
+
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    statusEl.textContent = 'Camera is not supported on this device/browser.';
+    return;
+  }
+
+  cameraStarting = true;
+  if (openCameraBtn) {
+    openCameraBtn.disabled = true;
   }
 
   if (stream) {
@@ -473,6 +488,7 @@ async function startCamera(forceRestart = false) {
   }
 
   try {
+    statusEl.textContent = 'Opening camera. Allow permission if prompted.';
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: currentFacingMode },
@@ -484,12 +500,19 @@ async function startCamera(forceRestart = false) {
     video.srcObject = stream;
     await video.play();
     await enableCameraAutoFocus(stream);
-    await setupScannerEngine();
     updateCameraUiState(true);
     statusEl.textContent = 'Rear camera ready. Hold document steady for auto capture or tap capture.';
+
+    // Do not block camera-open UX on scanner boot; enhancement can start in the background.
+    void setupScannerEngine();
   } catch (error) {
     updateCameraUiState(false);
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
+  } finally {
+    cameraStarting = false;
+    if (openCameraBtn) {
+      openCameraBtn.disabled = false;
+    }
   }
 }
 
@@ -506,7 +529,7 @@ async function setupScannerEngine() {
 
   const scannerConfig = settings?.scanner || {};
   try {
-    scannerEngine = await window.DocScanner.create({
+    const createPromise = window.DocScanner.create({
       video,
       overlayCanvas: edgeOverlay,
       minFocusScore: Number(scannerConfig.minFocusScore || 120),
@@ -528,10 +551,23 @@ async function setupScannerEngine() {
         });
       }
     });
+    scannerEngine = await Promise.race([
+      createPromise,
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error('Scanner initialization timed out')), Number(scannerConfig.initTimeoutMs || 6000));
+      })
+    ]);
+    if (!cameraActive) {
+      scannerEngine.stop();
+      scannerEngine = null;
+      return;
+    }
     scannerEngine.start();
   } catch (error) {
     scannerEngine = null;
-    statusEl.textContent = 'Scanner enhancement unavailable. Using manual capture mode.';
+    if (cameraActive) {
+      statusEl.textContent = 'Scanner enhancement unavailable. Using manual capture mode.';
+    }
   }
 }
 
