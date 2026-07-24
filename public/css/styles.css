@@ -1,6 +1,10 @@
 :root {
   color-scheme: dark;
   --bg: #060606;
+  --bg-spot-1: rgba(226, 31, 43, 0.28);
+  --bg-spot-2: rgba(217, 31, 111, 0.26);
+  --bg-spot-3: rgba(146, 204, 56, 0.2);
+  --bg-spot-4: rgba(0, 119, 200, 0.22);
   --panel: rgba(18, 18, 18, 0.88);
   --accent: #d91f6f;
   --accent-2: #f35a1f;
@@ -20,10 +24,10 @@ body {
   margin: 0;
   font-family: Segoe UI, Roboto, Arial, sans-serif;
   background:
-    radial-gradient(circle at 18% 12%, rgba(226, 31, 43, 0.28) 0%, transparent 24%),
-    radial-gradient(circle at 76% 10%, rgba(217, 31, 111, 0.26) 0%, transparent 24%),
-    radial-gradient(circle at 74% 66%, rgba(146, 204, 56, 0.2) 0%, transparent 28%),
-    radial-gradient(circle at 22% 82%, rgba(0, 119, 200, 0.22) 0%, transparent 28%),
+    radial-gradient(circle at 18% 12%, var(--bg-spot-1) 0%, transparent 24%),
+    radial-gradient(circle at 76% 10%, var(--bg-spot-2) 0%, transparent 24%),
+    radial-gradient(circle at 74% 66%, var(--bg-spot-3) 0%, transparent 28%),
+    radial-gradient(circle at 22% 82%, var(--bg-spot-4) 0%, transparent 28%),
     linear-gradient(180deg, #040404 0%, var(--bg) 100%);
   color: var(--text);
   min-height: 100vh;
@@ -38,16 +42,43 @@ body {
 .home-hero {
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .logo-mark {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
+  width: 110px;
+  height: 110px;
+  border-radius: 24px;
   display: block;
   object-fit: cover;
-  margin-bottom: 12px;
-  box-shadow: 0 10px 25px rgba(15, 118, 110, 0.35);
+  margin: 0 auto 14px;
+  box-shadow: 0 16px 36px rgba(247, 176, 0, 0.34);
+}
+
+.legacy-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  margin: 0 auto 14px;
+}
+
+.legacy-s-mark {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.legacy-brand span {
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .hero,

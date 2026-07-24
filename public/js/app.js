@@ -189,6 +189,10 @@ function getActiveTheme(settingsObj) {
 function applyTheme(theme) {
   const root = document.documentElement;
   root.style.setProperty('--bg', theme.bg);
+  root.style.setProperty('--bg-spot-1', theme.bgSpot1 || 'rgba(226, 31, 43, 0.28)');
+  root.style.setProperty('--bg-spot-2', theme.bgSpot2 || 'rgba(217, 31, 111, 0.26)');
+  root.style.setProperty('--bg-spot-3', theme.bgSpot3 || 'rgba(146, 204, 56, 0.2)');
+  root.style.setProperty('--bg-spot-4', theme.bgSpot4 || 'rgba(0, 119, 200, 0.22)');
   root.style.setProperty('--panel', theme.panel);
   root.style.setProperty('--accent', theme.accent);
   root.style.setProperty('--accent-2', theme.accent2);
@@ -264,6 +268,13 @@ function renderDynamicFields() {
 function applyFunctionUi() {
   if (!activeFunctionConfig) return;
   applyFunctionThemeClass(activeFunctionConfig.code);
+
+  const baseTheme = getActiveTheme(settings);
+  const functionTheme = activeFunctionConfig.theme || {};
+  applyTheme({
+    ...baseTheme,
+    ...functionTheme
+  });
 
   const label = activeFunctionConfig.label || activeFunctionConfig.code;
   if (functionBadge) {

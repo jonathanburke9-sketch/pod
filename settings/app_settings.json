@@ -1,8 +1,28 @@
 {
   "home": {
-    "title": "POD Hub",
-    "subtitle": "Choose one function to start scanning and upload to the right OneDrive destination.",
-    "badge": "Device-locked | Function-based | OneDrive-ready"
+    "title": "ScanHive",
+    "subtitle": "",
+    "badge": "",
+    "showSubtitle": false,
+    "showBadge": false
+  },
+  "homeTheme": {
+    "bg": "#0f0f0f",
+    "bgSpot1": "rgba(247, 176, 0, 0.25)",
+    "bgSpot2": "rgba(255, 208, 66, 0.2)",
+    "bgSpot3": "rgba(102, 102, 102, 0.2)",
+    "bgSpot4": "rgba(38, 38, 38, 0.32)",
+    "panel": "rgba(24, 24, 24, 0.9)",
+    "accent": "#f7b000",
+    "accent2": "#ffd042",
+    "accent3": "#f8ba18",
+    "accent4": "#f0a500",
+    "text": "#f4f4f5",
+    "muted": "#d4d4d8",
+    "border": "rgba(247, 176, 0, 0.22)",
+    "formBg": "#171717",
+    "formText": "#f4f4f5",
+    "secondaryButtonBg": "#262626"
   },
   "ui": {
     "appTitle": "POD Capture",
@@ -40,6 +60,7 @@
       "label": "POD-SB",
       "cardHint": "Current flow",
       "colorClass": "fn-pod-sb",
+      "cardGradient": "linear-gradient(120deg, #c026d3, #e11d48, #f97316)",
       "documentPrefix": "INV-",
       "documentLabel": "Invoice number",
       "documentPlaceholder": "1042",
@@ -47,6 +68,24 @@
       "documentPatternHint": "Numbers only. INV- is added automatically.",
       "folderSuffix": "POD-SB",
       "filenamePrefix": "PODSB",
+      "theme": {
+        "bg": "#110312",
+        "bgSpot1": "rgba(217, 31, 111, 0.28)",
+        "bgSpot2": "rgba(243, 90, 31, 0.24)",
+        "bgSpot3": "rgba(246, 227, 0, 0.18)",
+        "bgSpot4": "rgba(104, 36, 102, 0.26)",
+        "panel": "rgba(32, 11, 29, 0.88)",
+        "accent": "#d91f6f",
+        "accent2": "#f35a1f",
+        "accent3": "#f6e300",
+        "accent4": "#f7831f",
+        "text": "#fff7fb",
+        "muted": "#ffd6e8",
+        "border": "rgba(255, 114, 175, 0.25)",
+        "formBg": "#220f1f",
+        "formText": "#fff7fb",
+        "secondaryButtonBg": "#35152e"
+      },
       "extraFields": []
     },
     {
@@ -54,6 +93,7 @@
       "label": "POD-Just",
       "cardHint": "Alt POD fields",
       "colorClass": "fn-pod-just",
+      "cardGradient": "linear-gradient(120deg, #0f766e, #0ea5e9, #2563eb)",
       "documentPrefix": "INV-",
       "documentLabel": "Invoice number",
       "documentPlaceholder": "1042",
@@ -61,6 +101,24 @@
       "documentPatternHint": "Numbers only. INV- is added automatically.",
       "folderSuffix": "POD-Just",
       "filenamePrefix": "PODJUST",
+      "theme": {
+        "bg": "#061621",
+        "bgSpot1": "rgba(14, 165, 233, 0.28)",
+        "bgSpot2": "rgba(15, 118, 110, 0.25)",
+        "bgSpot3": "rgba(37, 99, 235, 0.22)",
+        "bgSpot4": "rgba(34, 211, 238, 0.2)",
+        "panel": "rgba(8, 29, 43, 0.9)",
+        "accent": "#0f766e",
+        "accent2": "#0284c7",
+        "accent3": "#22d3ee",
+        "accent4": "#60a5fa",
+        "text": "#f3fbff",
+        "muted": "#cfeeff",
+        "border": "rgba(56, 189, 248, 0.26)",
+        "formBg": "#0a2435",
+        "formText": "#f3fbff",
+        "secondaryButtonBg": "#0f2f45"
+      },
       "extraFields": [
         {
           "key": "deliveryNote",
@@ -76,6 +134,7 @@
       "label": "Receipt-SB",
       "cardHint": "Receipt capture",
       "colorClass": "fn-receipt-sb",
+      "cardGradient": "linear-gradient(120deg, #ea580c, #f59e0b, #eab308)",
       "documentPrefix": "RCPT-",
       "documentLabel": "Receipt number",
       "documentPlaceholder": "9931",
@@ -83,6 +142,24 @@
       "documentPatternHint": "Numbers only. RCPT- is added automatically.",
       "folderSuffix": "Receipt-SB",
       "filenamePrefix": "RECSB",
+      "theme": {
+        "bg": "#1b0f02",
+        "bgSpot1": "rgba(234, 88, 12, 0.32)",
+        "bgSpot2": "rgba(245, 158, 11, 0.26)",
+        "bgSpot3": "rgba(234, 179, 8, 0.22)",
+        "bgSpot4": "rgba(120, 53, 15, 0.28)",
+        "panel": "rgba(52, 27, 8, 0.9)",
+        "accent": "#ea580c",
+        "accent2": "#f59e0b",
+        "accent3": "#fbbf24",
+        "accent4": "#facc15",
+        "text": "#fff8eb",
+        "muted": "#ffe1b3",
+        "border": "rgba(251, 146, 60, 0.3)",
+        "formBg": "#3a2009",
+        "formText": "#fff8eb",
+        "secondaryButtonBg": "#4a2b0f"
+      },
       "extraFields": [
         {
           "key": "amount",
@@ -98,6 +175,7 @@
       "label": "Receipt-Just",
       "cardHint": "Receipt alt fields",
       "colorClass": "fn-receipt-just",
+      "cardGradient": "linear-gradient(120deg, #166534, #22c55e, #16a34a)",
       "documentPrefix": "RCPT-",
       "documentLabel": "Receipt number",
       "documentPlaceholder": "9931",
@@ -105,6 +183,24 @@
       "documentPatternHint": "Numbers only. RCPT- is added automatically.",
       "folderSuffix": "Receipt-Just",
       "filenamePrefix": "RECJUST",
+      "theme": {
+        "bg": "#07190d",
+        "bgSpot1": "rgba(22, 163, 74, 0.3)",
+        "bgSpot2": "rgba(34, 197, 94, 0.26)",
+        "bgSpot3": "rgba(74, 222, 128, 0.2)",
+        "bgSpot4": "rgba(21, 128, 61, 0.24)",
+        "panel": "rgba(11, 42, 23, 0.9)",
+        "accent": "#166534",
+        "accent2": "#16a34a",
+        "accent3": "#22c55e",
+        "accent4": "#4ade80",
+        "text": "#f4fff6",
+        "muted": "#d6f7de",
+        "border": "rgba(74, 222, 128, 0.26)",
+        "formBg": "#10391e",
+        "formText": "#f4fff6",
+        "secondaryButtonBg": "#174e2a"
+      },
       "extraFields": [
         {
           "key": "customerCode",

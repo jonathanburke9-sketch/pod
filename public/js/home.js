@@ -10,6 +10,33 @@ let settings = null;
 let staffMembers = [];
 let boundStaffId = localStorage.getItem('pod-device-driver') || '';
 
+function getActiveTheme(settingsObj) {
+  const presetKey = settingsObj.activeThemePreset;
+  const preset = settingsObj.themePresets && settingsObj.themePresets[presetKey];
+  if (preset) return preset;
+  return settingsObj.theme || settingsObj.themePresets?.ocean || {};
+}
+
+function applyTheme(theme) {
+  const root = document.documentElement;
+  root.style.setProperty('--bg', theme.bg || '#060606');
+  root.style.setProperty('--bg-spot-1', theme.bgSpot1 || 'rgba(226, 31, 43, 0.28)');
+  root.style.setProperty('--bg-spot-2', theme.bgSpot2 || 'rgba(217, 31, 111, 0.26)');
+  root.style.setProperty('--bg-spot-3', theme.bgSpot3 || 'rgba(146, 204, 56, 0.2)');
+  root.style.setProperty('--bg-spot-4', theme.bgSpot4 || 'rgba(0, 119, 200, 0.22)');
+  root.style.setProperty('--panel', theme.panel || 'rgba(18, 18, 18, 0.88)');
+  root.style.setProperty('--accent', theme.accent || '#d91f6f');
+  root.style.setProperty('--accent-2', theme.accent2 || '#f35a1f');
+  root.style.setProperty('--accent-3', theme.accent3 || theme.accent2 || '#f35a1f');
+  root.style.setProperty('--accent-4', theme.accent4 || theme.accent2 || '#f35a1f');
+  root.style.setProperty('--text', theme.text || '#f8fafc');
+  root.style.setProperty('--muted', theme.muted || '#d6d6d6');
+  root.style.setProperty('--border', theme.border || 'rgba(255, 255, 255, 0.14)');
+  root.style.setProperty('--form-bg', theme.formBg || '#121212');
+  root.style.setProperty('--form-text', theme.formText || '#f8fafc');
+  root.style.setProperty('--secondary-button-bg', theme.secondaryButtonBg || '#1a1a1a');
+}
+
 function getFallbackFunctions() {
   return ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'];
 }
@@ -127,14 +154,18 @@ async function loadSettings() {
   try {
     const response = await fetch('/settings/app_settings.json');
     settings = await response.json();
+    const homeTheme = settings?.homeTheme || getActiveTheme(settings);
+    applyTheme(homeTheme);
 
     const title = document.getElementById('homeTitle');
     const subtitle = document.getElementById('homeSubtitle');
     const badge = document.getElementById('homeBadge');
     if (settings?.home) {
       title.textContent = settings.home.title || title.textContent;
-      subtitle.textContent = settings.home.subtitle || subtitle.textContent;
-      badge.textContent = settings.home.badge || badge.textContent;
+      subtitle.textContent = settings.home.subtitle || '';
+      badge.textContent = settings.home.badge || '';
+      subtitle.classList.toggle('hidden', settings.home.showSubtitle === false || !subtitle.textContent.trim());
+      badge.classList.toggle('hidden', settings.home.showBadge === false || !badge.textContent.trim());
     }
   } catch (error) {
     settings = null;
@@ -160,6 +191,9 @@ function renderConfiguredFunctionCards() {
   definitions.forEach(def => {
     const button = document.createElement('button');
     button.className = `function-card ${def.colorClass || ''}`.trim();
+    if (def.cardGradient) {
+      button.style.background = def.cardGradient;
+    }
     button.dataset.functionCode = def.code;
     button.type = 'button';
     button.innerHTML = `<strong>${def.label || def.code}</strong><span>${def.cardHint || 'Open function'}</span>`;
