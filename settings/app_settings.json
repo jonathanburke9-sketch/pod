@@ -58,6 +58,8 @@
     {
       "code": "pod-sb",
       "label": "POD-SB",
+      "buttonLabel": "POD",
+      "iconSrc": "/icons/pod-s-truck-exact.png",
       "cardHint": "Current flow",
       "colorClass": "fn-pod-sb",
       "cardGradient": "linear-gradient(120deg, #c026d3, #e11d48, #f97316)",
@@ -223,6 +225,13 @@
       "Cash",
       "S2S"
     ]
+  },
+  "scanner": {
+    "minFocusScore": 120,
+    "minAreaRatio": 0.2,
+    "requiredStableFrames": 10,
+    "autoCaptureCooldownMs": 1800,
+    "autoCaptureLockMs": 1200
   },
   "activeThemePreset": "spectrum",
   "themePresets": {

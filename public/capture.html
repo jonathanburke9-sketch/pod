@@ -62,6 +62,7 @@
           <div>
             <div class="camera-wrap">
               <video id="cameraPreview" class="preview hidden" autoplay playsinline muted></video>
+              <canvas id="edgeOverlay" class="preview-overlay hidden" aria-hidden="true"></canvas>
               <div id="captureGuide" class="capture-guide hidden" aria-hidden="true">
                 <span class="corner tl"></span>
                 <span class="corner tr"></span>
@@ -71,7 +72,7 @@
             </div>
             <canvas id="canvas" class="hidden"></canvas>
             <div class="grid" style="margin-top:12px;">
-              <button id="openCameraBtn" class="secondary">Open camera</button>
+              <button id="openCameraBtn" class="secondary">Open rear camera</button>
               <button id="captureBtn">Capture scan</button>
               <button id="removeScanBtn" class="secondary">Remove last scan</button>
               <button id="clearScansBtn" class="secondary">Clear scans</button>
@@ -114,6 +115,7 @@
       </section>
     </main>
 
-    <script src="/js/app.js?v=20260724a"></script>
+    <script src="/js/doc-scanner.js?v=20260724b"></script>
+    <script src="/js/app.js?v=20260724b"></script>
   </body>
 </html>

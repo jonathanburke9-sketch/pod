@@ -198,11 +198,13 @@ function renderConfiguredFunctionCards() {
     button.type = 'button';
     if (String(def.code || '').toLowerCase() === 'pod-sb') {
       button.classList.add('has-left-icon');
+      const podLabel = def.buttonLabel || 'POD';
+      const iconSrc = def.iconSrc || '/icons/sugarberry-s.png';
       button.innerHTML = `
         <div class="function-card-row">
-          <img class="function-s-icon" src="/icons/sugarberry-s.png" alt="S icon" />
+          <img class="function-s-icon" src="${iconSrc}" alt="POD function icon" />
           <div>
-            <strong>POD</strong>
+            <strong>${podLabel}</strong>
             <span>${def.cardHint || 'Open function'}</span>
           </div>
         </div>

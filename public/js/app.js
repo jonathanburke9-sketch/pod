@@ -15,6 +15,7 @@ const edgeCropToggle = document.getElementById('edgeCropToggle');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
+const edgeOverlay = document.getElementById('edgeOverlay');
 const captureGuide = document.getElementById('captureGuide');
 const canvas = document.getElementById('canvas');
 const imagePreview = document.getElementById('capturedImage');
@@ -48,6 +49,8 @@ let invoiceRegex = /^INV-\d{4}$/i;
 let activeFunctionCode = 'pod-sb';
 let activeFunctionConfig = null;
 let dynamicFieldInputs = {};
+let scannerEngine = null;
+let autoCaptureLock = false;
 let health = {
   failedUploads: 0,
   lastSyncAt: ''
@@ -489,11 +492,54 @@ async function startCamera(forceRestart = false) {
     video.srcObject = stream;
     await video.play();
     await enableCameraAutoFocus(stream);
+    await setupScannerEngine();
     updateCameraUiState(true);
-    statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
+    statusEl.textContent = 'Rear camera ready. Hold document steady for auto capture or tap capture.';
   } catch (error) {
     updateCameraUiState(false);
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
+  }
+}
+
+async function setupScannerEngine() {
+  if (!window.DocScanner || !edgeOverlay || !video) {
+    scannerEngine = null;
+    return;
+  }
+
+  if (scannerEngine) {
+    scannerEngine.stop();
+    scannerEngine = null;
+  }
+
+  const scannerConfig = settings?.scanner || {};
+  try {
+    scannerEngine = await window.DocScanner.create({
+      video,
+      overlayCanvas: edgeOverlay,
+      minFocusScore: Number(scannerConfig.minFocusScore || 120),
+      minAreaRatio: Number(scannerConfig.minAreaRatio || 0.2),
+      requiredStableFrames: Number(scannerConfig.requiredStableFrames || 10),
+      autoCaptureCooldownMs: Number(scannerConfig.autoCaptureCooldownMs || 1800),
+      onStatus: message => {
+        if (message && cameraActive) {
+          statusEl.textContent = message;
+        }
+      },
+      onAutoCapture: () => {
+        if (autoCaptureLock) return;
+        autoCaptureLock = true;
+        captureInvoice(true).finally(() => {
+          window.setTimeout(() => {
+            autoCaptureLock = false;
+          }, Number(scannerConfig.autoCaptureLockMs || 1200));
+        });
+      }
+    });
+    scannerEngine.start();
+  } catch (error) {
+    scannerEngine = null;
+    statusEl.textContent = 'Scanner enhancement unavailable. Using manual capture mode.';
   }
 }
 
@@ -540,6 +586,9 @@ function updateCameraUiState(isActive) {
   if (captureGuide) {
     captureGuide.classList.toggle('hidden', !isActive);
   }
+  if (edgeOverlay) {
+    edgeOverlay.classList.toggle('hidden', !isActive);
+  }
   if (openCameraBtn) {
     openCameraBtn.textContent = isActive ? 'Close camera' : 'Open camera';
   }
@@ -548,6 +597,10 @@ function updateCameraUiState(isActive) {
 }
 
 function stopCamera() {
+  if (scannerEngine) {
+    scannerEngine.stop();
+    scannerEngine = null;
+  }
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
     stream = undefined;
@@ -839,13 +892,32 @@ function processScanFromCurrentFrame(useEdgeCrop) {
   };
 }
 
-function captureInvoice() {
+async function captureInvoice(isAutoCapture = false) {
   if (!cameraActive || !stream || video.readyState < 2) {
     statusEl.textContent = 'Open camera first, then capture the scan.';
     return;
   }
 
-  const result = processScanFromCurrentFrame(autoEdgeCropEnabled);
+  let result = null;
+
+  if (scannerEngine) {
+    const scanned = await scannerEngine.captureProcessed();
+    if (!scanned.ok) {
+      statusEl.textContent = scanned.reason || 'Capture rejected. Please retry with better focus.';
+      return;
+    }
+
+    result = {
+      dataUrl: scanned.dataUrl,
+      qualityWarnings: [],
+      edgeDetected: scanned.edgeDetected,
+      edgeCropRequested: true,
+      focusScore: scanned.focusScore
+    };
+  } else {
+    result = processScanFromCurrentFrame(autoEdgeCropEnabled);
+  }
+
   capturedScans.push(result);
   imagePreview.src = result.dataUrl;
   imagePreview.classList.remove('hidden');
@@ -863,8 +935,8 @@ function captureInvoice() {
     statusEl.textContent = 'Color scan captured in full-frame mode. Add more scans if needed, then save to the queue as a PDF.';
   } else {
     statusEl.textContent = result.edgeDetected
-      ? 'Color scan captured with edge detection. Add more scans if needed, then save to the queue as a PDF.'
-      : 'Color scan captured. Edge not confidently detected, so the full frame was kept. Add more scans if needed, then save to the queue as a PDF.';
+      ? `${isAutoCapture ? 'Auto-captured' : 'Captured'} enhanced scan with edge detection. Add more scans if needed, then save to the queue as a PDF.`
+      : `${isAutoCapture ? 'Auto-captured' : 'Captured'} enhanced scan without reliable edge lock. Add more scans if needed, then save to the queue as a PDF.`;
   }
 }
 
@@ -1371,7 +1443,9 @@ async function syncQueue() {
     : (lastSuccessMessage || 'All deliveries uploaded.');
 }
 
-captureBtn.addEventListener('click', captureInvoice);
+captureBtn.addEventListener('click', () => {
+  captureInvoice(false);
+});
 removeScanBtn.addEventListener('click', removeLastScan);
 clearScansBtn.addEventListener('click', clearScans);
 if (edgeCropToggle) {
