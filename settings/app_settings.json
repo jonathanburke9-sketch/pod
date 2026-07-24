@@ -1,12 +1,17 @@
 {
+  "home": {
+    "title": "POD Hub",
+    "subtitle": "Choose one function to start scanning and upload to the right OneDrive destination.",
+    "badge": "Device-locked | Function-based | OneDrive-ready"
+  },
   "ui": {
-    "appTitle": "POD Pulse",
+    "appTitle": "POD Capture",
     "subtitle": "Capture signed proof of delivery, store it offline, and sync it when the connection returns.",
-    "badgeText": "Offline-safe | Driver-linked | OneDrive-ready",
-    "driverLabel": "Driver (locked to this device)",
-    "driverBindLabel": "Select driver once",
-    "driverBindButton": "Lock driver to this device",
-    "invoiceLabel": "Invoice number",
+    "badgeText": "Offline-safe | Staff-linked | OneDrive-ready",
+    "driverLabel": "Staff member (locked to this device)",
+    "driverBindLabel": "Select staff once",
+    "driverBindButton": "Lock staff to this device",
+    "invoiceLabel": "Document number",
     "invoicePlaceholder": "1042",
     "paymentLabel": "Payment method",
     "notesLabel": "Notes",
@@ -22,13 +27,95 @@
     "connectionOnline": "Online",
     "connectionOffline": "Offline",
     "notLinkedLabel": "Not linked yet",
-    "invoicePatternHint": "Numbers only. The INV- prefix is added automatically.",
+    "invoicePatternHint": "Numbers only. Prefix is added automatically.",
     "healthTitle": "Upload Health",
     "healthPendingLabel": "Pending",
     "healthLastSyncLabel": "Last Sync",
     "healthFailedLabel": "Failed Uploads",
     "healthNeverLabel": "Never"
   },
+  "functions": [
+    {
+      "code": "pod-sb",
+      "label": "POD-SB",
+      "cardHint": "Current flow",
+      "colorClass": "fn-pod-sb",
+      "documentPrefix": "INV-",
+      "documentLabel": "Invoice number",
+      "documentPlaceholder": "1042",
+      "documentPattern": "^\\d+$",
+      "documentPatternHint": "Numbers only. INV- is added automatically.",
+      "folderSuffix": "POD-SB",
+      "filenamePrefix": "PODSB",
+      "extraFields": []
+    },
+    {
+      "code": "pod-just",
+      "label": "POD-Just",
+      "cardHint": "Alt POD fields",
+      "colorClass": "fn-pod-just",
+      "documentPrefix": "INV-",
+      "documentLabel": "Invoice number",
+      "documentPlaceholder": "1042",
+      "documentPattern": "^\\d+$",
+      "documentPatternHint": "Numbers only. INV- is added automatically.",
+      "folderSuffix": "POD-Just",
+      "filenamePrefix": "PODJUST",
+      "extraFields": [
+        {
+          "key": "deliveryNote",
+          "label": "Delivery note",
+          "type": "text",
+          "placeholder": "DN-7782",
+          "required": true
+        }
+      ]
+    },
+    {
+      "code": "receipt-sb",
+      "label": "Receipt-SB",
+      "cardHint": "Receipt capture",
+      "colorClass": "fn-receipt-sb",
+      "documentPrefix": "RCPT-",
+      "documentLabel": "Receipt number",
+      "documentPlaceholder": "9931",
+      "documentPattern": "^\\d+$",
+      "documentPatternHint": "Numbers only. RCPT- is added automatically.",
+      "folderSuffix": "Receipt-SB",
+      "filenamePrefix": "RECSB",
+      "extraFields": [
+        {
+          "key": "amount",
+          "label": "Receipt amount",
+          "type": "text",
+          "placeholder": "1200.50",
+          "required": true
+        }
+      ]
+    },
+    {
+      "code": "receipt-just",
+      "label": "Receipt-Just",
+      "cardHint": "Receipt alt fields",
+      "colorClass": "fn-receipt-just",
+      "documentPrefix": "RCPT-",
+      "documentLabel": "Receipt number",
+      "documentPlaceholder": "9931",
+      "documentPattern": "^\\d+$",
+      "documentPatternHint": "Numbers only. RCPT- is added automatically.",
+      "folderSuffix": "Receipt-Just",
+      "filenamePrefix": "RECJUST",
+      "extraFields": [
+        {
+          "key": "customerCode",
+          "label": "Customer code",
+          "type": "text",
+          "placeholder": "CUST-44",
+          "required": true
+        }
+      ]
+    }
+  ],
   "form": {
     "invoicePattern": "^\\d+$",
     "invoicePatternFlags": "",
@@ -95,13 +182,13 @@
     }
   },
   "admin": {
-    "title": "Driver Admin",
-    "subtitle": "Manage driver names and folder mapping for OneDrive.",
-    "saveButton": "Save Drivers",
-    "addButton": "Add Driver",
+    "title": "Staff Admin",
+    "subtitle": "Manage staff names, folder mapping, and function access.",
+    "saveButton": "Save Staff",
+    "addButton": "Add Staff",
     "removeButton": "Remove Selected",
     "authLabel": "Admin key",
-    "searchPlaceholder": "Search by driver or folder",
+    "searchPlaceholder": "Search by staff or folder",
     "sortLabel": "Sort",
     "sortNameAsc": "Name A-Z",
     "sortNameDesc": "Name Z-A",

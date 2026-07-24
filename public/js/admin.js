@@ -13,6 +13,14 @@ const sortOrder = document.getElementById('sortOrder');
 let settings = null;
 let drivers = [];
 let selectedDriverId = '';
+let functionDefinitions = [];
+
+const defaultFunctionDefinitions = [
+  { code: 'pod-sb', label: 'POD-SB' },
+  { code: 'pod-just', label: 'POD-Just' },
+  { code: 'receipt-sb', label: 'Receipt-SB' },
+  { code: 'receipt-just', label: 'Receipt-Just' }
+];
 
 function randomId() {
   return `driver-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -108,6 +116,7 @@ function renderTable() {
 
     const nameCell = document.createElement('td');
     const folderCell = document.createElement('td');
+    const functionsCell = document.createElement('td');
 
     const nameInput = document.createElement('input');
     nameInput.value = driver.name;
@@ -124,10 +133,45 @@ function renderTable() {
       driver.folder = e.target.value;
     });
 
+    const selectedFunctions = Array.isArray(driver.functions) && driver.functions.length
+      ? driver.functions
+      : functionDefinitions.map(item => item.code);
+    driver.functions = selectedFunctions;
+
+    const wraps = document.createElement('div');
+    wraps.className = 'chip-row';
+
+    functionDefinitions.forEach(def => {
+      const label = document.createElement('label');
+      label.className = 'toggle-row';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = selectedFunctions.includes(def.code);
+      checkbox.addEventListener('change', event => {
+        const nextSet = new Set(Array.isArray(driver.functions) ? driver.functions : []);
+        if (event.target.checked) {
+          nextSet.add(def.code);
+        } else {
+          nextSet.delete(def.code);
+        }
+        driver.functions = Array.from(nextSet);
+      });
+
+      const text = document.createElement('span');
+      text.textContent = def.label;
+
+      label.appendChild(checkbox);
+      label.appendChild(text);
+      wraps.appendChild(label);
+    });
+
     nameCell.appendChild(nameInput);
     folderCell.appendChild(folderInput);
+    functionsCell.appendChild(wraps);
     row.appendChild(nameCell);
     row.appendChild(folderCell);
+    row.appendChild(functionsCell);
     driversBody.appendChild(row);
   });
 }
@@ -137,11 +181,23 @@ async function loadSettings() {
   settings = await response.json();
   applyTheme(getActiveTheme(settings));
   applyAdminUi(settings);
+  functionDefinitions = Array.isArray(settings.functions) && settings.functions.length
+    ? settings.functions.map(item => ({
+      code: String(item.code || '').trim().toLowerCase(),
+      label: item.label || item.code
+    })).filter(item => item.code)
+    : defaultFunctionDefinitions;
 }
 
 async function loadDrivers() {
   const response = await fetch('/api/drivers');
   drivers = await response.json();
+  drivers = (Array.isArray(drivers) ? drivers : []).map(driver => ({
+    ...driver,
+    functions: Array.isArray(driver.functions) && driver.functions.length
+      ? driver.functions.map(value => String(value || '').trim().toLowerCase()).filter(Boolean)
+      : functionDefinitions.map(item => item.code)
+  }));
   selectedDriverId = drivers[0] ? drivers[0].id : '';
   renderTable();
 }
@@ -149,13 +205,14 @@ async function loadDrivers() {
 function addDriver() {
   const next = {
     id: randomId(),
-    name: 'New Driver',
-    folder: 'New Driver'
+    name: 'New Staff',
+    folder: 'New Staff',
+    functions: functionDefinitions.map(item => item.code)
   };
   drivers.push(next);
   selectedDriverId = next.id;
   renderTable();
-  adminStatus.textContent = 'Driver row added. Edit values and save.';
+  adminStatus.textContent = 'Staff row added. Edit values and save.';
 }
 
 function removeDriver() {
@@ -167,7 +224,7 @@ function removeDriver() {
   drivers = drivers.filter(driver => driver.id !== selectedDriverId);
   selectedDriverId = drivers[0] ? drivers[0].id : '';
   renderTable();
-  adminStatus.textContent = 'Selected driver removed locally. Save to confirm.';
+  adminStatus.textContent = 'Selected staff row removed locally. Save to confirm.';
 }
 
 async function saveDrivers() {
@@ -183,7 +240,10 @@ async function saveDrivers() {
       'Content-Type': 'application/json',
       'x-admin-key': adminKey
     },
-    body: JSON.stringify(drivers)
+    body: JSON.stringify(drivers.map(driver => ({
+      ...driver,
+      functions: Array.isArray(driver.functions) ? driver.functions : []
+    })))
   });
 
   if (!response.ok) {
@@ -191,7 +251,7 @@ async function saveDrivers() {
     return;
   }
 
-  adminStatus.textContent = 'Drivers saved to backend.';
+  adminStatus.textContent = 'Staff mapping saved to backend.';
 }
 
 addDriverBtn.addEventListener('click', addDriver);

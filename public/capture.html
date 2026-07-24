@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#d91f6f" />
+    <title>POD Capture</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/css/styles.css?v=20260724a" />
+  </head>
+  <body>
+    <main class="app">
+      <section id="adminNav" class="top-nav hidden">
+        <a href="/admin.html">Admin</a>
+      </section>
+      <section class="top-nav nav-left">
+        <a href="/index.html">Back to Functions</a>
+      </section>
+
+      <section class="hero">
+        <h1 id="appTitle">POD Capture</h1>
+        <p id="subtitle">Capture signed proof of delivery, store it offline, and sync it when the connection returns.</p>
+        <span id="badgeText" class="badge">Offline-safe | Driver-linked | OneDrive-ready</span>
+        <span id="functionBadge" class="badge function-badge">Function: POD-SB</span>
+      </section>
+
+      <section class="card">
+        <div class="grid two-col">
+          <div>
+            <div class="field">
+              <label id="driverLabel">Staff member (locked to this device)</label>
+              <div id="driverBadge" class="chip">Not linked yet</div>
+            </div>
+            <div id="setupDriver" class="field" style="margin-top:12px;">
+              <label id="driverBindLabel" for="driverPicker">Select staff once</label>
+              <select id="driverPicker"></select>
+              <button id="bindDriverBtn" style="margin-top:8px;">Lock staff to this device</button>
+            </div>
+            <div class="field" style="margin-top:12px;">
+              <label id="invoiceLabel" for="invoiceNumber">Invoice number</label>
+              <div class="invoice-input-group">
+                <span class="invoice-prefix" id="documentPrefix">INV-</span>
+                <input id="invoiceNumber" inputmode="numeric" placeholder="1042" />
+              </div>
+              <small id="invoiceHint" class="hint">Numbers only. The INV- prefix is added automatically.</small>
+            </div>
+            <div class="field" style="margin-top:12px;">
+              <label id="paymentLabel" for="paymentMethod">Payment method</label>
+              <select id="paymentMethod"></select>
+            </div>
+            <div id="dynamicFieldContainer" class="grid" style="margin-top:12px;"></div>
+            <div class="field" style="margin-top:12px;">
+              <label id="notesLabel" for="notes">Notes</label>
+              <textarea id="notes" rows="3" placeholder="Optional notes for this POD submission"></textarea>
+            </div>
+            <div class="chip-row">
+              <span class="chip" id="queueCount">0 pending</span>
+              <span class="chip" id="connectionState">Online</span>
+            </div>
+          </div>
+          <div>
+            <div class="camera-wrap">
+              <video id="cameraPreview" class="preview hidden" autoplay playsinline muted></video>
+              <div id="captureGuide" class="capture-guide hidden" aria-hidden="true">
+                <span class="corner tl"></span>
+                <span class="corner tr"></span>
+                <span class="corner bl"></span>
+                <span class="corner br"></span>
+              </div>
+            </div>
+            <canvas id="canvas" class="hidden"></canvas>
+            <div class="grid" style="margin-top:12px;">
+              <button id="openCameraBtn" class="secondary">Open camera</button>
+              <button id="captureBtn">Capture scan</button>
+              <button id="removeScanBtn" class="secondary">Remove last scan</button>
+              <button id="clearScansBtn" class="secondary">Clear scans</button>
+              <button id="switchBtn" class="secondary">Switch camera</button>
+            </div>
+            <label class="toggle-row" style="margin-top:10px;">
+              <input id="edgeCropToggle" type="checkbox" />
+              <span>Auto edge crop (disable to prevent cutting)</span>
+            </label>
+            <section class="health-panel" aria-label="Upload health">
+              <h3 id="healthTitle">Upload Health</h3>
+              <div class="health-grid">
+                <div class="health-item">
+                  <span id="healthPendingLabel">Pending</span>
+                  <strong id="healthPendingValue">0</strong>
+                </div>
+                <div class="health-item">
+                  <span id="healthLastSyncLabel">Last Sync</span>
+                  <strong id="healthLastSyncValue">Never</strong>
+                </div>
+                <div class="health-item">
+                  <span id="healthFailedLabel">Failed Uploads</span>
+                  <strong id="healthFailedValue">0</strong>
+                </div>
+              </div>
+            </section>
+            <p id="scanSummary" class="hint" style="margin-top:10px;">0 scans captured</p>
+            <div id="scanList" class="scan-list" aria-live="polite"></div>
+            <img id="capturedImage" class="preview hidden" alt="Captured invoice" />
+            <p class="status" id="status">Ready to capture a signed invoice.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="grid">
+          <button id="submitBtn">Save to offline queue</button>
+          <button id="syncBtn" class="secondary">Sync now</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="/js/app.js?v=20260724a"></script>
+  </body>
+</html>

@@ -35,6 +35,21 @@ body {
   padding: 20px 16px 60px;
 }
 
+.home-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.logo-mark {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: block;
+  object-fit: cover;
+  margin-bottom: 12px;
+  box-shadow: 0 10px 25px rgba(15, 118, 110, 0.35);
+}
+
 .hero,
 .card {
   background: var(--panel);
@@ -316,6 +331,10 @@ button.secondary {
   margin-bottom: 10px;
 }
 
+.top-nav.nav-left {
+  justify-content: flex-start;
+}
+
 .top-nav a {
   color: var(--text);
   text-decoration: none;
@@ -330,9 +349,95 @@ button.secondary {
   gap: 10px;
 }
 
+.function-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.function-card {
+  text-align: left;
+  border-radius: 18px;
+  min-height: 84px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.function-card strong {
+  font-size: 1rem;
+}
+
+.function-card span {
+  font-size: 0.85rem;
+  opacity: 0.92;
+}
+
+.function-card.locked,
+.function-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+
+.fn-pod-sb {
+  background: linear-gradient(120deg, #c026d3, #e11d48, #f97316);
+}
+
+.fn-pod-just {
+  background: linear-gradient(120deg, #0f766e, #0ea5e9, #2563eb);
+}
+
+.fn-receipt-sb {
+  background: linear-gradient(120deg, #ea580c, #f59e0b, #eab308);
+}
+
+.fn-receipt-just {
+  background: linear-gradient(120deg, #166534, #22c55e, #16a34a);
+}
+
+.function-badge {
+  margin-left: 8px;
+}
+
+body.function-pod-sb {
+  --accent: #d91f6f;
+  --accent-2: #f35a1f;
+  --accent-3: #f6e300;
+  --accent-4: #1fb655;
+}
+
+body.function-pod-just {
+  --accent: #0f766e;
+  --accent-2: #0284c7;
+  --accent-3: #22d3ee;
+  --accent-4: #60a5fa;
+}
+
+body.function-receipt-sb {
+  --accent: #ea580c;
+  --accent-2: #f59e0b;
+  --accent-3: #fbbf24;
+  --accent-4: #facc15;
+}
+
+body.function-receipt-just {
+  --accent: #166534;
+  --accent-2: #16a34a;
+  --accent-3: #22c55e;
+  --accent-4: #4ade80;
+}
+
 @media (min-width: 700px) {
   .admin-toolbar {
     grid-template-columns: 2fr 1fr;
+  }
+}
+
+@media (min-width: 700px) {
+  .function-grid {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

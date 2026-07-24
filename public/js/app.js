@@ -31,6 +31,9 @@ const healthFailedLabel = document.getElementById('healthFailedLabel');
 const healthPendingValue = document.getElementById('healthPendingValue');
 const healthLastSyncValue = document.getElementById('healthLastSyncValue');
 const healthFailedValue = document.getElementById('healthFailedValue');
+const functionBadge = document.getElementById('functionBadge');
+const documentPrefixEl = document.getElementById('documentPrefix');
+const dynamicFieldContainer = document.getElementById('dynamicFieldContainer');
 
 let stream;
 let cameraActive = false;
@@ -42,6 +45,9 @@ let boundDriverId = localStorage.getItem('pod-device-driver') || '';
 let autoEdgeCropEnabled = localStorage.getItem('pod-auto-edge-crop') === '1';
 let settings = null;
 let invoiceRegex = /^INV-\d{4}$/i;
+let activeFunctionCode = 'pod-sb';
+let activeFunctionConfig = null;
+let dynamicFieldInputs = {};
 let health = {
   failedUploads: 0,
   lastSyncAt: ''
@@ -49,6 +55,77 @@ let health = {
 const queueDbName = 'pod-offline-db';
 const queueStoreName = 'queue';
 const queueDbVersion = 1;
+
+const defaultFunctionConfigs = [
+  {
+    code: 'pod-sb',
+    label: 'POD-SB',
+    documentPrefix: 'INV-',
+    documentLabel: 'Invoice number',
+    documentPlaceholder: '1042',
+    documentPattern: '^\\d+$',
+    documentPatternHint: 'Numbers only. INV- is added automatically.',
+    filenamePrefix: 'PODSB',
+    extraFields: []
+  },
+  {
+    code: 'pod-just',
+    label: 'POD-Just',
+    documentPrefix: 'INV-',
+    documentLabel: 'Invoice number',
+    documentPlaceholder: '1042',
+    documentPattern: '^\\d+$',
+    documentPatternHint: 'Numbers only. INV- is added automatically.',
+    filenamePrefix: 'PODJUST',
+    extraFields: [
+      {
+        key: 'deliveryNote',
+        label: 'Delivery note',
+        type: 'text',
+        placeholder: 'DN-7782',
+        required: true
+      }
+    ]
+  },
+  {
+    code: 'receipt-sb',
+    label: 'Receipt-SB',
+    documentPrefix: 'RCPT-',
+    documentLabel: 'Receipt number',
+    documentPlaceholder: '9931',
+    documentPattern: '^\\d+$',
+    documentPatternHint: 'Numbers only. RCPT- is added automatically.',
+    filenamePrefix: 'RECSB',
+    extraFields: [
+      {
+        key: 'amount',
+        label: 'Receipt amount',
+        type: 'text',
+        placeholder: '1200.50',
+        required: true
+      }
+    ]
+  },
+  {
+    code: 'receipt-just',
+    label: 'Receipt-Just',
+    documentPrefix: 'RCPT-',
+    documentLabel: 'Receipt number',
+    documentPlaceholder: '9931',
+    documentPattern: '^\\d+$',
+    documentPatternHint: 'Numbers only. RCPT- is added automatically.',
+    filenamePrefix: 'RECJUST',
+    extraFields: [
+      {
+        key: 'customerCode',
+        label: 'Customer code',
+        type: 'text',
+        placeholder: 'CUST-44',
+        required: true
+      }
+    ]
+  }
+];
 
 function openQueueDb() {
   return new Promise((resolve, reject) => {
@@ -125,6 +202,86 @@ function applyTheme(theme) {
   root.style.setProperty('--secondary-button-bg', theme.secondaryButtonBg);
 }
 
+function getFunctionDefinitions() {
+  const configured = Array.isArray(settings?.functions) ? settings.functions : [];
+  const source = configured.length ? configured : defaultFunctionConfigs;
+  return source.map(item => ({
+    ...item,
+    code: String(item.code || '').trim().toLowerCase()
+  })).filter(item => item.code);
+}
+
+function resolveRequestedFunctionCode() {
+  const queryValue = new URLSearchParams(window.location.search).get('fn');
+  const localValue = localStorage.getItem('pod-selected-function');
+  return String(queryValue || localValue || 'pod-sb').trim().toLowerCase();
+}
+
+function getFunctionConfig(code) {
+  const definitions = getFunctionDefinitions();
+  const found = definitions.find(item => item.code === code);
+  if (found) return found;
+  return definitions[0] || defaultFunctionConfigs[0];
+}
+
+function applyFunctionThemeClass(code) {
+  const classes = ['function-pod-sb', 'function-pod-just', 'function-receipt-sb', 'function-receipt-just'];
+  document.body.classList.remove(...classes);
+  document.body.classList.add(`function-${code}`);
+}
+
+function renderDynamicFields() {
+  dynamicFieldInputs = {};
+  if (!dynamicFieldContainer) return;
+
+  dynamicFieldContainer.innerHTML = '';
+  const fields = Array.isArray(activeFunctionConfig?.extraFields) ? activeFunctionConfig.extraFields : [];
+  fields.forEach(field => {
+    const key = String(field.key || '').trim();
+    if (!key) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'field';
+
+    const label = document.createElement('label');
+    label.textContent = field.label || key;
+
+    const input = document.createElement('input');
+    input.type = field.type || 'text';
+    input.placeholder = field.placeholder || '';
+    input.dataset.fieldKey = key;
+    if (field.required) {
+      input.setAttribute('required', 'required');
+    }
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    dynamicFieldContainer.appendChild(wrapper);
+    dynamicFieldInputs[key] = input;
+  });
+}
+
+function applyFunctionUi() {
+  if (!activeFunctionConfig) return;
+  applyFunctionThemeClass(activeFunctionConfig.code);
+
+  const label = activeFunctionConfig.label || activeFunctionConfig.code;
+  if (functionBadge) {
+    functionBadge.textContent = `Function: ${label}`;
+  }
+
+  if (documentPrefixEl) {
+    documentPrefixEl.textContent = activeFunctionConfig.documentPrefix || 'INV-';
+  }
+
+  const documentLabel = activeFunctionConfig.documentLabel || settings?.ui?.invoiceLabel || 'Document number';
+  document.getElementById('invoiceLabel').textContent = documentLabel;
+  invoiceNumberInput.placeholder = activeFunctionConfig.documentPlaceholder || settings?.ui?.invoicePlaceholder || '1042';
+  invoiceHint.textContent = activeFunctionConfig.documentPatternHint || settings?.ui?.invoicePatternHint || 'Numbers only.';
+
+  renderDynamicFields();
+}
+
 function applyUiSettings(ui) {
   document.getElementById('appTitle').textContent = ui.appTitle;
   document.getElementById('subtitle').textContent = ui.subtitle;
@@ -162,8 +319,9 @@ function applyPaymentOptions(form) {
 }
 
 function setupValidation(form) {
+  const patternSource = activeFunctionConfig?.documentPattern || form.invoicePattern || '^\\d+$';
   try {
-    invoiceRegex = new RegExp(form.invoicePattern || '^\\d+$', form.invoicePatternFlags || '');
+    invoiceRegex = new RegExp(patternSource, form.invoicePatternFlags || '');
   } catch (error) {
     invoiceRegex = /^\d+$/;
   }
@@ -202,8 +360,12 @@ function setAutoEdgeCropEnabled(enabled) {
 async function loadSettings() {
   const response = await fetch('/settings/app_settings.json');
   settings = await response.json();
+  activeFunctionCode = resolveRequestedFunctionCode();
+  activeFunctionConfig = getFunctionConfig(activeFunctionCode);
+  localStorage.setItem('pod-selected-function', activeFunctionConfig.code);
   applyTheme(getActiveTheme(settings));
   applyUiSettings(settings.ui);
+  applyFunctionUi();
   applyPaymentOptions(settings.form);
   setupValidation(settings.form);
   setAutoEdgeCropEnabled(autoEdgeCropEnabled);
@@ -241,23 +403,35 @@ function renderDriverState() {
   if (adminNav) {
     adminNav.classList.toggle('hidden', !isAdminDevice);
   }
+
+  if (boundDriver && activeFunctionConfig) {
+    const allowed = Array.isArray(boundDriver.functions) && boundDriver.functions.length
+      ? boundDriver.functions.map(value => String(value || '').toLowerCase()).includes(activeFunctionConfig.code)
+      : true;
+    if (!allowed) {
+      statusEl.textContent = `${activeFunctionConfig.label} is disabled for this staff member. Go back and choose another function.`;
+    }
+  }
 }
 
 function loadDrivers() {
   return fetch('/api/drivers')
     .then(res => res.json())
     .then(items => {
-      drivers = items;
+      drivers = (Array.isArray(items) ? items : []).map(item => ({
+        ...item,
+        functions: Array.isArray(item.functions) ? item.functions : []
+      }));
       renderDriverOptions();
       renderDriverState();
     })
     .catch(() => {
       drivers = [
-        { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin' },
-        { id: 'driver-002', name: 'Deon', folder: 'Deon' },
-        { id: 'driver-003', name: 'Themba', folder: 'Themba' },
-        { id: 'driver-004', name: 'Janine', folder: 'Janine' },
-        { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
+        { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin', functions: ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'] },
+        { id: 'driver-002', name: 'Deon', folder: 'Deon', functions: ['pod-sb', 'receipt-sb'] },
+        { id: 'driver-003', name: 'Themba', folder: 'Themba', functions: ['pod-sb', 'pod-just'] },
+        { id: 'driver-004', name: 'Janine', folder: 'Janine', functions: ['receipt-sb', 'receipt-just'] },
+        { id: 'driver-005', name: 'Wilna', folder: 'Wilna', functions: ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'] }
       ];
       renderDriverOptions();
       renderDriverState();
@@ -981,7 +1155,9 @@ function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
   const dateToken = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   const timeToken = `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
-  return `${entry.invoiceNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
+  const functionPrefix = entry.functionCode ? String(entry.functionCode).toUpperCase() : 'POD';
+  const documentNumber = entry.invoiceNumber || entry.documentNumber || 'DOC-UNKNOWN';
+  return `${functionPrefix}-${documentNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
 function refreshQueueCount() {
@@ -1025,13 +1201,24 @@ function isInvoiceValid(invoiceNumber) {
 }
 
 function normalizeInvoiceNumber(rawValue) {
-  return rawValue.trim().replace(/^inv-?/i, '').replace(/\s+/g, '');
+  const prefix = String(activeFunctionConfig?.documentPrefix || '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const prefixPattern = prefix ? new RegExp(`^${prefix}`, 'i') : null;
+  const cleaned = rawValue.trim().replace(/\s+/g, '');
+  return prefixPattern ? cleaned.replace(prefixPattern, '') : cleaned;
 }
 
 async function enqueueEntry() {
   const selectedDriver = getBoundDriver();
   if (!selectedDriver) {
     statusEl.textContent = 'Link this device to a driver first.';
+    return;
+  }
+
+  const allowedFunctions = Array.isArray(selectedDriver.functions) && selectedDriver.functions.length
+    ? selectedDriver.functions.map(value => String(value || '').toLowerCase())
+    : [];
+  if (allowedFunctions.length && !allowedFunctions.includes(activeFunctionConfig.code)) {
+    statusEl.textContent = `${activeFunctionConfig.label} is disabled for this staff member.`;
     return;
   }
 
@@ -1045,7 +1232,22 @@ async function enqueueEntry() {
     statusEl.textContent = 'Invoice number must contain digits only.';
     return;
   }
-  const invoiceNumber = `INV-${invoiceDigits}`;
+  const documentPrefix = activeFunctionConfig.documentPrefix || 'INV-';
+  const invoiceNumber = `${documentPrefix}${invoiceDigits}`;
+
+  const extraFields = {};
+  const extraFieldDefs = Array.isArray(activeFunctionConfig.extraFields) ? activeFunctionConfig.extraFields : [];
+  for (const field of extraFieldDefs) {
+    const key = String(field.key || '').trim();
+    if (!key) continue;
+
+    const value = String(dynamicFieldInputs[key]?.value || '').trim();
+    if (field.required && !value) {
+      statusEl.textContent = `${field.label || key} is required for ${activeFunctionConfig.label}.`;
+      return;
+    }
+    extraFields[key] = value;
+  }
 
   let pdfDataUrl = '';
   try {
@@ -1063,9 +1265,13 @@ async function enqueueEntry() {
     driverId: selectedDriver.id,
     driverName: selectedDriver.name,
     folder: selectedDriver.folder || selectedDriver.name,
+    functionCode: activeFunctionConfig.code,
+    functionLabel: activeFunctionConfig.label,
     invoiceNumber,
+    documentNumber: invoiceNumber,
     paymentMethod: paymentMethodSelect.value,
     notes,
+    extraFields,
     scanCount: capturedScans.length,
     documentMimeType: 'application/pdf',
     imageData: pdfDataUrl,
@@ -1085,6 +1291,9 @@ async function enqueueEntry() {
 
   invoiceNumberInput.value = '';
   notesInput.value = '';
+  Object.values(dynamicFieldInputs).forEach(input => {
+    input.value = '';
+  });
   paymentMethodSelect.value = settings.form.paymentOptions[0];
   capturedScans = [];
   refreshScanSummary();
