@@ -72,22 +72,12 @@
             </div>
             <canvas id="canvas" class="hidden"></canvas>
             <div class="grid" style="margin-top:12px;">
-              <button id="openCameraBtn" class="secondary">Open camera app</button>
+              <button id="openCameraBtn" class="secondary">Open rear camera</button>
               <button id="captureBtn">Capture scan</button>
               <button id="removeScanBtn" class="secondary">Remove last scan</button>
               <button id="clearScansBtn" class="secondary">Clear scans</button>
               <button id="switchBtn" class="secondary">Switch camera</button>
             </div>
-            <input id="nativeCameraInput" class="hidden" type="file" accept="image/*" capture="environment" />
-            <section id="nativeReviewPanel" class="native-review hidden" aria-label="Manual edge review">
-              <h3>Adjust document corners</h3>
-              <p class="hint">Drag the green points to refine edges, then tap Use this scan.</p>
-              <canvas id="nativeReviewCanvas" class="preview native-review-canvas"></canvas>
-              <div class="grid" style="margin-top:10px;">
-                <button id="nativeReviewApplyBtn">Use this scan</button>
-                <button id="nativeReviewRetakeBtn" class="secondary">Retake photo</button>
-              </div>
-            </section>
             <label class="toggle-row" style="margin-top:10px;">
               <input id="edgeCropToggle" type="checkbox" />
               <span>Auto edge crop (disable to prevent cutting)</span>
@@ -125,7 +115,7 @@
       </section>
     </main>
 
-    <script src="/js/doc-scanner.js?v=20260724d"></script>
-    <script src="/js/app.js?v=20260724d"></script>
+    <script src="/js/doc-scanner.js?v=20260724c"></script>
+    <script src="/js/app.js?v=20260724c"></script>
   </body>
 </html>

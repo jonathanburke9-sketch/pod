@@ -96,17 +96,6 @@
     return orderCorners(points);
   }
 
-  function defaultQuad(width, height) {
-    const padX = Math.round(width * 0.08);
-    const padY = Math.round(height * 0.08);
-    return [
-      { x: padX, y: padY },
-      { x: width - padX, y: padY },
-      { x: width - padX, y: height - padY },
-      { x: padX, y: height - padY }
-    ];
-  }
-
   class DocScannerEngine {
     constructor(options) {
       this.video = options.video;
@@ -412,45 +401,6 @@
       return warped;
     }
 
-    buildWarpedDocumentFromPoints(srcMat, pointsInput) {
-      const points = orderCorners((pointsInput || []).map(point => ({
-        x: Number(point.x || 0),
-        y: Number(point.y || 0)
-      })));
-      const [tl, tr, br, bl] = points;
-
-      const widthA = distance(br, bl);
-      const widthB = distance(tr, tl);
-      const maxWidth = Math.max(Math.round(widthA), Math.round(widthB), 1);
-
-      const heightA = distance(tr, br);
-      const heightB = distance(tl, bl);
-      const maxHeight = Math.max(Math.round(heightA), Math.round(heightB), 1);
-
-      const srcTri = this.cv.matFromArray(4, 1, this.cv.CV_32FC2, [
-        tl.x, tl.y,
-        tr.x, tr.y,
-        br.x, br.y,
-        bl.x, bl.y
-      ]);
-      const dstTri = this.cv.matFromArray(4, 1, this.cv.CV_32FC2, [
-        0, 0,
-        maxWidth - 1, 0,
-        maxWidth - 1, maxHeight - 1,
-        0, maxHeight - 1
-      ]);
-
-      const transform = this.cv.getPerspectiveTransform(srcTri, dstTri);
-      const warped = new this.cv.Mat();
-      this.cv.warpPerspective(srcMat, warped, transform, new this.cv.Size(maxWidth, maxHeight));
-
-      srcTri.delete();
-      dstTri.delete();
-      transform.delete();
-
-      return warped;
-    }
-
     processForScan(mat) {
       const gray = new this.cv.Mat();
       const bw = new this.cv.Mat();
@@ -524,117 +474,6 @@
         dataUrl,
         focusScore,
         edgeDetected: Boolean(this.lastDetectedQuad)
-      };
-    }
-
-    async captureProcessedFromCanvas(sourceCanvas) {
-      if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-        return { ok: false, reason: 'Native camera image is empty' };
-      }
-
-      const srcMat = this.cv.imread(sourceCanvas);
-      const detection = this.detectDocument(srcMat);
-
-      if (this.lastDetectedQuad) {
-        this.lastDetectedQuad.delete();
-      }
-      this.lastDetectedQuad = detection.quad ? detection.quad.clone() : null;
-      this.lastPreviewSize = { width: srcMat.cols, height: srcMat.rows };
-
-      const warped = this.buildWarpedDocument(srcMat);
-      const { processedMat, focusScore } = this.processForScan(warped);
-
-      if (focusScore < this.minFocusScore) {
-        if (detection.quad) detection.quad.delete();
-        srcMat.delete();
-        warped.delete();
-        processedMat.delete();
-        return {
-          ok: false,
-          reason: 'Capture rejected because it is blurry. Hold steady and retry.',
-          focusScore,
-          edgeDetected: Boolean(this.lastDetectedQuad)
-        };
-      }
-
-      const outputCanvas = document.createElement('canvas');
-      outputCanvas.width = processedMat.cols;
-      outputCanvas.height = processedMat.rows;
-      this.cv.imshow(outputCanvas, processedMat);
-      const dataUrl = outputCanvas.toDataURL('image/jpeg', 0.92);
-
-      if (detection.quad) detection.quad.delete();
-      srcMat.delete();
-      warped.delete();
-      processedMat.delete();
-
-      return {
-        ok: true,
-        dataUrl,
-        focusScore,
-        edgeDetected: Boolean(this.lastDetectedQuad)
-      };
-    }
-
-    async detectQuadFromCanvas(sourceCanvas) {
-      if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-        return { ok: false, reason: 'Native camera image is empty' };
-      }
-
-      const srcMat = this.cv.imread(sourceCanvas);
-      const detection = this.detectDocument(srcMat);
-      const quad = detection.quad
-        ? contourToPoints(detection.quad, this.cv).map(point => ({ x: point.x, y: point.y }))
-        : defaultQuad(srcMat.cols, srcMat.rows);
-
-      if (detection.quad) {
-        detection.quad.delete();
-      }
-      srcMat.delete();
-
-      return {
-        ok: true,
-        quad,
-        edgeDetected: Boolean(detection.quad),
-        focusScore: detection.focusScore
-      };
-    }
-
-    async processCanvasWithQuad(sourceCanvas, quadPoints) {
-      if (!sourceCanvas || !sourceCanvas.width || !sourceCanvas.height) {
-        return { ok: false, reason: 'Native camera image is empty' };
-      }
-
-      const srcMat = this.cv.imread(sourceCanvas);
-      const warped = this.buildWarpedDocumentFromPoints(srcMat, quadPoints);
-      const { processedMat, focusScore } = this.processForScan(warped);
-
-      if (focusScore < this.minFocusScore) {
-        srcMat.delete();
-        warped.delete();
-        processedMat.delete();
-        return {
-          ok: false,
-          reason: 'Capture rejected because it is blurry. Hold steady and retry.',
-          focusScore
-        };
-      }
-
-      const outputCanvas = document.createElement('canvas');
-      outputCanvas.width = processedMat.cols;
-      outputCanvas.height = processedMat.rows;
-      this.cv.imshow(outputCanvas, processedMat);
-      const dataUrl = outputCanvas.toDataURL('image/jpeg', 0.92);
-
-      srcMat.delete();
-      warped.delete();
-      processedMat.delete();
-
-      return {
-        ok: true,
-        dataUrl,
-        focusScore,
-        edgeDetected: true
       };
     }
   }
