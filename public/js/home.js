@@ -196,7 +196,20 @@ function renderConfiguredFunctionCards() {
     }
     button.dataset.functionCode = def.code;
     button.type = 'button';
-    button.innerHTML = `<strong>${def.label || def.code}</strong><span>${def.cardHint || 'Open function'}</span>`;
+    if (String(def.code || '').toLowerCase() === 'pod-sb') {
+      button.classList.add('has-left-icon');
+      button.innerHTML = `
+        <div class="function-card-row">
+          <img class="function-s-icon" src="/icons/sugarberry-s.png" alt="S icon" />
+          <div>
+            <strong>POD</strong>
+            <span>${def.cardHint || 'Open function'}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      button.innerHTML = `<strong>${def.label || def.code}</strong><span>${def.cardHint || 'Open function'}</span>`;
+    }
     button.addEventListener('click', () => openFunction(String(def.code || '').toLowerCase()));
     functionGrid.appendChild(button);
   });

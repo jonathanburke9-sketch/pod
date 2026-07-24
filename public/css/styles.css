@@ -405,6 +405,31 @@ button.secondary {
   opacity: 0.92;
 }
 
+.function-card.has-left-icon {
+  justify-content: center;
+}
+
+.function-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.function-s-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 3px;
+}
+
+.function-card-row strong,
+.function-card-row span {
+  display: block;
+  text-align: left;
+}
+
 .function-card.locked,
 .function-card:disabled {
   opacity: 0.45;
