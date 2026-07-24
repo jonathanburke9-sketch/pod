@@ -79,16 +79,8 @@ const defaultFunctionConfigs = [
     documentPlaceholder: '1042',
     documentPattern: '^\\d+$',
     documentPatternHint: 'Numbers only. INV- is added automatically.',
-    filenamePrefix: 'PODJUST',
-    extraFields: [
-      {
-        key: 'deliveryNote',
-        label: 'Delivery note',
-        type: 'text',
-        placeholder: 'DN-7782',
-        required: true
-      }
-    ]
+    filenamePrefix: 'PODSB',
+    extraFields: []
   },
   {
     code: 'receipt-sb',

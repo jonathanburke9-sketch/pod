@@ -93,6 +93,8 @@
     {
       "code": "pod-just",
       "label": "POD-Just",
+      "buttonLabel": "POD-Just",
+      "iconSrc": "/icons/just-pod-logo.png",
       "cardHint": "Alt POD fields",
       "colorClass": "fn-pod-just",
       "cardGradient": "linear-gradient(120deg, #0f766e, #0ea5e9, #2563eb)",
@@ -102,7 +104,7 @@
       "documentPattern": "^\\d+$",
       "documentPatternHint": "Numbers only. INV- is added automatically.",
       "folderSuffix": "POD-Just",
-      "filenamePrefix": "PODJUST",
+      "filenamePrefix": "PODSB",
       "theme": {
         "bg": "#061621",
         "bgSpot1": "rgba(14, 165, 233, 0.28)",
@@ -121,19 +123,13 @@
         "formText": "#f3fbff",
         "secondaryButtonBg": "#0f2f45"
       },
-      "extraFields": [
-        {
-          "key": "deliveryNote",
-          "label": "Delivery note",
-          "type": "text",
-          "placeholder": "DN-7782",
-          "required": true
-        }
-      ]
+      "extraFields": []
     },
     {
       "code": "receipt-sb",
       "label": "Receipt-SB",
+      "buttonLabel": "Receipt-SB",
+      "iconSrc": "/icons/sb-receipt-logo.png",
       "cardHint": "Receipt capture",
       "colorClass": "fn-receipt-sb",
       "cardGradient": "linear-gradient(120deg, #ea580c, #f59e0b, #eab308)",
@@ -175,6 +171,8 @@
     {
       "code": "receipt-just",
       "label": "Receipt-Just",
+      "buttonLabel": "Receipt-Just",
+      "iconSrc": "/icons/just-receipt-logo.png",
       "cardHint": "Receipt alt fields",
       "colorClass": "fn-receipt-just",
       "cardGradient": "linear-gradient(120deg, #166534, #22c55e, #16a34a)",

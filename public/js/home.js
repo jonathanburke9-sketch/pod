@@ -103,15 +103,18 @@ function renderFunctionCards() {
     card.disabled = !allowed;
     card.classList.toggle('locked', !allowed);
 
-    const hint = card.querySelector('span');
+    let stateText = '';
     if (!boundStaff) {
-      hint.textContent = 'Link staff first';
+      stateText = 'Link staff first';
     } else if (!allowed) {
-      hint.textContent = 'Disabled for this staff member';
+      stateText = 'Disabled for this staff member';
     } else {
       const config = getFunctionDefinitions().find(item => item.code === code);
-      hint.textContent = config?.cardHint || 'Open function';
+      stateText = config?.cardHint || 'Open function';
     }
+
+    card.title = stateText;
+    card.setAttribute('aria-disabled', allowed ? 'false' : 'true');
   });
 }
 
@@ -196,22 +199,11 @@ function renderConfiguredFunctionCards() {
     }
     button.dataset.functionCode = def.code;
     button.type = 'button';
-    if (String(def.code || '').toLowerCase() === 'pod-sb') {
-      button.classList.add('has-left-icon');
-      const podLabel = def.buttonLabel || 'POD';
-      const iconSrc = def.iconSrc || '/icons/sugarberry-s.png';
-      button.innerHTML = `
-        <div class="function-card-row">
-          <img class="function-s-icon" src="${iconSrc}" alt="POD function icon" />
-          <div>
-            <strong>${podLabel}</strong>
-            <span>${def.cardHint || 'Open function'}</span>
-          </div>
-        </div>
-      `;
-    } else {
-      button.innerHTML = `<strong>${def.label || def.code}</strong><span>${def.cardHint || 'Open function'}</span>`;
-    }
+    button.classList.add('icon-only');
+    const iconSrc = def.iconSrc || '/icons/sugarberry-s.png';
+    const iconLabel = def.buttonLabel || def.label || def.code;
+    button.setAttribute('aria-label', String(iconLabel || 'Function'));
+    button.innerHTML = `<img class="function-only-icon" src="${iconSrc}" alt="${String(iconLabel || 'Function icon')}" />`;
     button.addEventListener('click', () => openFunction(String(def.code || '').toLowerCase()));
     functionGrid.appendChild(button);
   });

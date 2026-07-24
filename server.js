@@ -44,7 +44,7 @@ const functionConfigs = {
     code: 'pod-just',
     label: 'POD-Just',
     folderSuffix: 'POD-Just',
-    filenamePrefix: 'PODJUST'
+    filenamePrefix: 'PODSB'
   },
   'receipt-sb': {
     code: 'receipt-sb',

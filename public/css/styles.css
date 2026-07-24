@@ -405,6 +405,22 @@ button.secondary {
   gap: 4px;
 }
 
+.function-card.icon-only {
+  min-height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.function-only-icon {
+  width: min(100%, 170px);
+  max-height: 96px;
+  object-fit: contain;
+  border-radius: 10px;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.24));
+}
+
 .function-card strong {
   font-size: 1rem;
 }
