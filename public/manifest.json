@@ -1,12 +1,18 @@
 {
-  "name": "POD Hub",
-  "short_name": "POD Hub",
+  "name": "ScanHive",
+  "short_name": "ScanHive",
   "description": "Offline-safe function-based POD and receipt capture",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#060606",
-  "theme_color": "#d91f6f",
+  "background_color": "#121212",
+  "theme_color": "#f7b000",
   "icons": [
+    {
+      "src": "/icons/scanhive-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
