@@ -231,8 +231,7 @@
     "minAreaRatio": 0.2,
     "requiredStableFrames": 10,
     "autoCaptureCooldownMs": 1800,
-    "autoCaptureLockMs": 1200,
-    "startupTimeoutMs": 5000
+    "autoCaptureLockMs": 1200
   },
   "activeThemePreset": "spectrum",
   "themePresets": {

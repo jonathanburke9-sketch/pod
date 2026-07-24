@@ -481,10 +481,6 @@ async function startCamera(forceRestart = false) {
   }
 
   try {
-    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-      throw new Error('Camera API not available. Open the app over HTTPS or localhost.');
-    }
-
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: currentFacingMode },
@@ -496,21 +492,12 @@ async function startCamera(forceRestart = false) {
     video.srcObject = stream;
     await video.play();
     await enableCameraAutoFocus(stream);
+    await setupScannerEngine();
     updateCameraUiState(true);
     statusEl.textContent = 'Rear camera ready. Hold document steady for auto capture or tap capture.';
-
-    // Keep camera usable even if scanner enhancement loads slowly or fails.
-    setupScannerEngine().catch(() => {
-      scannerEngine = null;
-    });
   } catch (error) {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      stream = undefined;
-    }
     updateCameraUiState(false);
-    const reason = error?.message || 'Unknown camera error';
-    statusEl.textContent = `Camera could not open: ${reason}`;
+    statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
   }
 }
 
@@ -527,7 +514,7 @@ async function setupScannerEngine() {
 
   const scannerConfig = settings?.scanner || {};
   try {
-    const createPromise = window.DocScanner.create({
+    scannerEngine = await window.DocScanner.create({
       video,
       overlayCanvas: edgeOverlay,
       minFocusScore: Number(scannerConfig.minFocusScore || 120),
@@ -549,14 +536,6 @@ async function setupScannerEngine() {
         });
       }
     });
-
-    const timeoutMs = Number(scannerConfig.startupTimeoutMs || 5000);
-    scannerEngine = await Promise.race([
-      createPromise,
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error(`Scanner init timeout after ${timeoutMs}ms`)), timeoutMs);
-      })
-    ]);
     scannerEngine.start();
   } catch (error) {
     scannerEngine = null;
