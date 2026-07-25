@@ -218,6 +218,8 @@
     "minBrightness": 55,
     "maxBrightness": 220,
     "minSharpness": 12,
+    "maxScanSidePx": 2200,
+    "jpegQuality": 0.9,
     "paymentOptions": [
       "EFT",
       "Cash",

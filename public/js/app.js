@@ -771,8 +771,8 @@ function enhanceColorScan(imageData) {
 }
 
 function optimizeScanCanvas(sourceCanvas) {
-  const maxSide = settings?.form?.maxScanSidePx || 1500;
-  const jpegQuality = settings?.form?.jpegQuality || 0.78;
+  const maxSide = settings?.form?.maxScanSidePx || 2200;
+  const jpegQuality = settings?.form?.jpegQuality || 0.9;
   const sourceWidth = sourceCanvas.width;
   const sourceHeight = sourceCanvas.height;
   const longestSide = Math.max(sourceWidth, sourceHeight) || 1;
