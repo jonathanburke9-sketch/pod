@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pod-pulse-v6';
+const CACHE_NAME = 'pod-pulse-v7';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -10,7 +10,7 @@ const APP_SHELL = [
   '/js/admin.js?v=20260724a',
   '/settings/app_settings.json',
   '/manifest.json',
-  '/icons/scanhive-icon.svg',
+  '/icons/scanhive-logo.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png'
