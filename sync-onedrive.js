@@ -16,6 +16,38 @@ const watchMode = process.argv.includes('--watch');
 const syncTargetMode = process.env.SYNC_TARGET_MODE
   || (businessOneDrive.isConfigured() ? 'business-onedrive' : 'filesystem');
 
+const functionConfigs = {
+  'pod-sb': {
+    code: 'pod-sb',
+    label: 'POD-SB',
+    folderSuffix: 'POD-SB',
+    filenamePrefix: 'PODSB'
+  },
+  'pod-just': {
+    code: 'pod-just',
+    label: 'POD-Just',
+    folderSuffix: 'POD-Just',
+    filenamePrefix: 'PODSB'
+  },
+  'receipt-sb': {
+    code: 'receipt-sb',
+    label: 'Receipt-SB',
+    folderSuffix: 'Receipt-SB',
+    filenamePrefix: 'RECSB'
+  },
+  'receipt-just': {
+    code: 'receipt-just',
+    label: 'Receipt-Just',
+    folderSuffix: 'Receipt-Just',
+    filenamePrefix: 'RECJUST'
+  }
+};
+
+function getFunctionConfig(functionCode) {
+  const normalized = String(functionCode || '').trim().toLowerCase();
+  return functionConfigs[normalized] || functionConfigs['pod-sb'];
+}
+
 function safePathSegment(value) {
   const text = String(value || '').trim();
   if (!text) return 'unknown';
@@ -83,6 +115,7 @@ function normalizePayload(row) {
     rowId: row.id,
     payload,
     mappedFolder: row.driver_folder || payload.folder || payload.driverFolder || payload.driverName || row.driver_name || 'Unmapped',
+    functionCode: payload.functionCode || row.function_code || '',
     invoiceNumber: row.invoice_number || payload.invoiceNumber || 'INV-unknown',
     timestamp: payload.timestamp || row.synced_at || new Date().toISOString(),
     fileName: payload.filename || '',
@@ -96,19 +129,22 @@ function buildFileDestination(normalized) {
     throw new Error('Submission payload does not contain a PDF data URL.');
   }
 
-  const folderSegment = safePathSegment(normalized.mappedFolder);
+  const functionConfig = getFunctionConfig(normalized.functionCode);
+  const folderSegments = [normalized.mappedFolder, functionConfig.folderSuffix]
+    .map(part => safePathSegment(part))
+    .filter(Boolean);
   const invoiceSegment = safePathSegment(normalized.invoiceNumber);
   const timeParts = buildTimestampParts(normalized.timestamp);
-  const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
+  const fallbackFileName = `${functionConfig.filenamePrefix}_${invoiceSegment}_${timeParts.stamp}.pdf`;
   const fileName = sanitizeFileName(normalized.fileName || fallbackFileName);
-  const targetRelativePath = [folderSegment, timeParts.year, timeParts.month, fileName].join('/');
+  const targetRelativePath = [...folderSegments, timeParts.year, timeParts.month, fileName].join('/');
   const logicalPath = [oneDrivePodRoot, targetRelativePath].filter(Boolean).join('/');
 
   const pathSegments = [oneDriveRoot];
   if (oneDrivePodRoot) {
     pathSegments.push(oneDrivePodRoot);
   }
-  pathSegments.push(folderSegment, timeParts.year, timeParts.month);
+  pathSegments.push(...folderSegments, timeParts.year, timeParts.month);
 
   const absoluteDir = path.join(...pathSegments);
   const absoluteFilePath = path.join(absoluteDir, fileName);

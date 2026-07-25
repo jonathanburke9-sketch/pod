@@ -49,8 +49,6 @@ let invoiceRegex = /^INV-\d{4}$/i;
 let activeFunctionCode = 'pod-sb';
 let activeFunctionConfig = null;
 let dynamicFieldInputs = {};
-let scannerEngine = null;
-let autoCaptureLock = false;
 let cameraStarting = false;
 let health = {
   failedUploads: 0,
@@ -501,10 +499,7 @@ async function startCamera(forceRestart = false) {
     await video.play();
     await enableCameraAutoFocus(stream);
     updateCameraUiState(true);
-    statusEl.textContent = 'Rear camera ready. Hold document steady for auto capture or tap capture.';
-
-    // Do not block camera-open UX on scanner boot; enhancement can start in the background.
-    void setupScannerEngine();
+    statusEl.textContent = 'Camera ready. Frame the invoice in the guides and capture.';
   } catch (error) {
     updateCameraUiState(false);
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
@@ -512,61 +507,6 @@ async function startCamera(forceRestart = false) {
     cameraStarting = false;
     if (openCameraBtn) {
       openCameraBtn.disabled = false;
-    }
-  }
-}
-
-async function setupScannerEngine() {
-  if (!window.DocScanner || !edgeOverlay || !video) {
-    scannerEngine = null;
-    return;
-  }
-
-  if (scannerEngine) {
-    scannerEngine.stop();
-    scannerEngine = null;
-  }
-
-  const scannerConfig = settings?.scanner || {};
-  try {
-    const createPromise = window.DocScanner.create({
-      video,
-      overlayCanvas: edgeOverlay,
-      minFocusScore: Number(scannerConfig.minFocusScore || 120),
-      minAreaRatio: Number(scannerConfig.minAreaRatio || 0.2),
-      requiredStableFrames: Number(scannerConfig.requiredStableFrames || 10),
-      autoCaptureCooldownMs: Number(scannerConfig.autoCaptureCooldownMs || 1800),
-      onStatus: message => {
-        if (message && cameraActive) {
-          statusEl.textContent = message;
-        }
-      },
-      onAutoCapture: () => {
-        if (autoCaptureLock) return;
-        autoCaptureLock = true;
-        captureInvoice(true).finally(() => {
-          window.setTimeout(() => {
-            autoCaptureLock = false;
-          }, Number(scannerConfig.autoCaptureLockMs || 1200));
-        });
-      }
-    });
-    scannerEngine = await Promise.race([
-      createPromise,
-      new Promise((_, reject) => {
-        window.setTimeout(() => reject(new Error('Scanner initialization timed out')), Number(scannerConfig.initTimeoutMs || 6000));
-      })
-    ]);
-    if (!cameraActive) {
-      scannerEngine.stop();
-      scannerEngine = null;
-      return;
-    }
-    scannerEngine.start();
-  } catch (error) {
-    scannerEngine = null;
-    if (cameraActive) {
-      statusEl.textContent = 'Scanner enhancement unavailable. Using manual capture mode.';
     }
   }
 }
@@ -625,10 +565,6 @@ function updateCameraUiState(isActive) {
 }
 
 function stopCamera() {
-  if (scannerEngine) {
-    scannerEngine.stop();
-    scannerEngine = null;
-  }
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
     stream = undefined;
@@ -926,25 +862,7 @@ async function captureInvoice(isAutoCapture = false) {
     return;
   }
 
-  let result = null;
-
-  if (scannerEngine) {
-    const scanned = await scannerEngine.captureProcessed();
-    if (!scanned.ok) {
-      statusEl.textContent = scanned.reason || 'Capture rejected. Please retry with better focus.';
-      return;
-    }
-
-    result = {
-      dataUrl: scanned.dataUrl,
-      qualityWarnings: [],
-      edgeDetected: scanned.edgeDetected,
-      edgeCropRequested: true,
-      focusScore: scanned.focusScore
-    };
-  } else {
-    result = processScanFromCurrentFrame(autoEdgeCropEnabled);
-  }
+  const result = processScanFromCurrentFrame(autoEdgeCropEnabled);
 
   capturedScans.push(result);
   imagePreview.src = result.dataUrl;

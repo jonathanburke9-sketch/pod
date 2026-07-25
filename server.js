@@ -449,21 +449,23 @@ function buildTimestampParts(isoTimestamp) {
 
 function buildSubmissionFileMetadata(payload, mappedFolder) {
   const functionConfig = getFunctionConfig(payload.functionCode);
-  const folderParts = [
+  const folderSegments = [
     mappedFolder || payload.folder || payload.driverName || 'Unmapped',
     functionConfig.folderSuffix
-  ].filter(Boolean);
-  const folderSegment = safePathSegment(folderParts.join('/'));
+  ]
+    .map(part => safePathSegment(part))
+    .filter(Boolean);
   const invoiceSegment = safePathSegment(payload.invoiceNumber || payload.documentNumber || 'DOC-unknown');
   const timeParts = buildTimestampParts(payload.timestamp);
   const fallbackFileName = `${functionConfig.filenamePrefix}_${invoiceSegment}_${timeParts.stamp}.pdf`;
   const fileName = sanitizeFileName(payload.filename || fallbackFileName);
-  const relativePath = [oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month, fileName]
+  const relativePath = [oneDrivePodRoot, ...folderSegments, timeParts.year, timeParts.month, fileName]
     .filter(Boolean)
     .join('/');
 
   return {
-    folderSegment,
+    folderSegments,
+    folderSegment: folderSegments.join('/'),
     invoiceSegment,
     timeParts,
     fileName,
@@ -589,7 +591,7 @@ function writePdfToOneDrive(payload, mappedFolder) {
   if (oneDrivePodRoot) {
     pathSegments.push(oneDrivePodRoot);
   }
-  pathSegments.push(fileMeta.folderSegment, fileMeta.timeParts.year, fileMeta.timeParts.month);
+  pathSegments.push(...fileMeta.folderSegments, fileMeta.timeParts.year, fileMeta.timeParts.month);
   const absoluteDir = path.join(...pathSegments);
   fs.mkdirSync(absoluteDir, { recursive: true });
 
