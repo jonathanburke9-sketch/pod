@@ -6,6 +6,7 @@ const invoiceNumberInput = document.getElementById('invoiceNumber');
 const invoiceHint = document.getElementById('invoiceHint');
 const paymentMethodSelect = document.getElementById('paymentMethod');
 const notesInput = document.getElementById('notes');
+const notesField = document.getElementById('notesField');
 const captureBtn = document.getElementById('captureBtn');
 const removeScanBtn = document.getElementById('removeScanBtn');
 const clearScansBtn = document.getElementById('clearScansBtn');
@@ -84,18 +85,34 @@ const defaultFunctionConfigs = [
   {
     code: 'receipt-sb',
     label: 'Receipt-SB',
-    documentPrefix: 'RCPT-',
-    documentLabel: 'Receipt number',
-    documentPlaceholder: '9931',
-    documentPattern: '^\\d+$',
-    documentPatternHint: 'Numbers only. RCPT- is added automatically.',
+    documentPrefix: '',
+    documentLabel: 'Vendor name',
+    documentPlaceholder: 'Type vendor name',
+    documentPattern: '^.+$',
+    documentPatternHint: 'Type the vendor name.',
+    documentInputMode: 'text',
+    documentNormalize: 'spaced',
     filenamePrefix: 'RECSB',
     extraFields: [
       {
-        key: 'amount',
-        label: 'Receipt amount',
-        type: 'text',
+        key: 'totalAmount',
+        label: 'Total amount',
+        type: 'number',
         placeholder: '1200.50',
+        required: true
+      },
+      {
+        key: 'vatAmount',
+        label: 'VAT amount',
+        type: 'number',
+        placeholder: '180.08',
+        required: true
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'select',
+        optionsSource: 'receiptCategoryOptions',
         required: true
       }
     ]
@@ -103,18 +120,34 @@ const defaultFunctionConfigs = [
   {
     code: 'receipt-just',
     label: 'Receipt-Just',
-    documentPrefix: 'RCPT-',
-    documentLabel: 'Receipt number',
-    documentPlaceholder: '9931',
-    documentPattern: '^\\d+$',
-    documentPatternHint: 'Numbers only. RCPT- is added automatically.',
+    documentPrefix: '',
+    documentLabel: 'Vendor name',
+    documentPlaceholder: 'Type vendor name',
+    documentPattern: '^.+$',
+    documentPatternHint: 'Type the vendor name.',
+    documentInputMode: 'text',
+    documentNormalize: 'spaced',
     filenamePrefix: 'RECJUST',
     extraFields: [
       {
-        key: 'customerCode',
-        label: 'Customer code',
-        type: 'text',
-        placeholder: 'CUST-44',
+        key: 'totalAmount',
+        label: 'Total amount',
+        type: 'number',
+        placeholder: '1200.50',
+        required: true
+      },
+      {
+        key: 'vatAmount',
+        label: 'VAT amount',
+        type: 'number',
+        placeholder: '180.08',
+        required: true
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'select',
+        optionsSource: 'receiptCategoryOptions',
         required: true
       }
     ]
@@ -244,9 +277,23 @@ function renderDynamicFields() {
     const label = document.createElement('label');
     label.textContent = field.label || key;
 
-    const input = document.createElement('input');
-    input.type = field.type || 'text';
-    input.placeholder = field.placeholder || '';
+    let input;
+    if (field.type === 'select') {
+      input = document.createElement('select');
+      const optionValues = Array.isArray(field.options)
+        ? field.options
+        : (Array.isArray(settings?.form?.[field.optionsSource]) ? settings.form[field.optionsSource] : []);
+      optionValues.forEach(optionValue => {
+        const option = document.createElement('option');
+        option.value = optionValue;
+        option.textContent = optionValue;
+        input.appendChild(option);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = field.type || 'text';
+      input.placeholder = field.placeholder || '';
+    }
     input.dataset.fieldKey = key;
     if (field.required) {
       input.setAttribute('required', 'required');
@@ -282,7 +329,13 @@ function applyFunctionUi() {
   const documentLabel = activeFunctionConfig.documentLabel || settings?.ui?.invoiceLabel || 'Document number';
   document.getElementById('invoiceLabel').textContent = documentLabel;
   invoiceNumberInput.placeholder = activeFunctionConfig.documentPlaceholder || settings?.ui?.invoicePlaceholder || '1042';
+  invoiceNumberInput.inputMode = activeFunctionConfig.documentInputMode || 'numeric';
   invoiceHint.textContent = activeFunctionConfig.documentPatternHint || settings?.ui?.invoicePatternHint || 'Numbers only.';
+
+  if (notesField) {
+    const isReceiptFunction = String(activeFunctionConfig.code || '').startsWith('receipt-');
+    notesField.classList.toggle('hidden', isReceiptFunction);
+  }
 
   renderDynamicFields();
 }
@@ -1230,10 +1283,13 @@ function isInvoiceValid(invoiceNumber) {
 }
 
 function normalizeInvoiceNumber(rawValue) {
+  const normalizeMode = String(activeFunctionConfig?.documentNormalize || '').toLowerCase();
+  const cleanedValue = normalizeMode === 'spaced'
+    ? String(rawValue || '').trim().replace(/\s+/g, ' ')
+    : String(rawValue || '').trim().replace(/\s+/g, '');
   const prefix = String(activeFunctionConfig?.documentPrefix || '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
   const prefixPattern = prefix ? new RegExp(`^${prefix}`, 'i') : null;
-  const cleaned = rawValue.trim().replace(/\s+/g, '');
-  return prefixPattern ? cleaned.replace(prefixPattern, '') : cleaned;
+  return prefixPattern ? cleanedValue.replace(prefixPattern, '') : cleanedValue;
 }
 
 async function enqueueEntry() {
@@ -1252,17 +1308,17 @@ async function enqueueEntry() {
   }
 
   if (!capturedScans.length || !invoiceNumberInput.value.trim()) {
-    statusEl.textContent = 'Capture at least one scan and add an invoice number before saving.';
+    statusEl.textContent = 'Capture at least one scan and complete the required document field before saving.';
     return;
   }
 
-  const invoiceDigits = normalizeInvoiceNumber(invoiceNumberInput.value);
-  if (!isInvoiceValid(invoiceDigits)) {
-    statusEl.textContent = 'Invoice number must contain digits only.';
+  const normalizedDocumentValue = normalizeInvoiceNumber(invoiceNumberInput.value);
+  if (!isInvoiceValid(normalizedDocumentValue)) {
+    statusEl.textContent = `${activeFunctionConfig.documentLabel || 'Document field'} is invalid.`;
     return;
   }
   const documentPrefix = activeFunctionConfig.documentPrefix || 'INV-';
-  const invoiceNumber = `${documentPrefix}${invoiceDigits}`;
+  const invoiceNumber = `${documentPrefix}${normalizedDocumentValue}`;
 
   const extraFields = {};
   const extraFieldDefs = Array.isArray(activeFunctionConfig.extraFields) ? activeFunctionConfig.extraFields : [];
@@ -1287,7 +1343,8 @@ async function enqueueEntry() {
   }
 
   const combinedWarnings = [...new Set(capturedScans.flatMap(scan => scan.qualityWarnings))];
-  const notes = notesInput.value.trim();
+  const isReceiptFunction = String(activeFunctionConfig.code || '').startsWith('receipt-');
+  const notes = isReceiptFunction ? '' : notesInput.value.trim();
 
   const entry = {
     id: `${Date.now()}`,
@@ -1296,8 +1353,10 @@ async function enqueueEntry() {
     folder: selectedDriver.folder || selectedDriver.name,
     functionCode: activeFunctionConfig.code,
     functionLabel: activeFunctionConfig.label,
+    isReceiptFunction,
     invoiceNumber,
     documentNumber: invoiceNumber,
+    vendorName: activeFunctionConfig.code.startsWith('receipt-') ? normalizedDocumentValue : '',
     paymentMethod: paymentMethodSelect.value,
     notes,
     extraFields,
@@ -1308,6 +1367,22 @@ async function enqueueEntry() {
     timestamp: new Date().toISOString(),
     filename: ''
   };
+
+  if (entry.isReceiptFunction) {
+    entry.totalAmount = extraFields.totalAmount || '';
+    entry.vatAmount = extraFields.vatAmount || '';
+    entry.category = extraFields.category || '';
+    entry.excelTableRow = {
+      vendorName: entry.vendorName,
+      paymentMethod: entry.paymentMethod,
+      totalAmount: entry.totalAmount,
+      vatAmount: entry.vatAmount,
+      category: entry.category,
+      receiptType: entry.functionLabel,
+      timestamp: entry.timestamp,
+      driverName: entry.driverName
+    };
+  }
   entry.filename = fileNameFromEntry(entry);
   pendingQueue.push(entry);
   await saveQueue();
@@ -1323,7 +1398,7 @@ async function enqueueEntry() {
   Object.values(dynamicFieldInputs).forEach(input => {
     input.value = '';
   });
-  paymentMethodSelect.value = settings.form.paymentOptions[0];
+  paymentMethodSelect.value = settings.form.paymentOptions[0] || '';
   capturedScans = [];
   refreshScanSummary();
 }

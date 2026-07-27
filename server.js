@@ -38,25 +38,29 @@ const functionConfigs = {
     code: 'pod-sb',
     label: 'POD-SB',
     folderSuffix: 'POD-SB',
-    filenamePrefix: 'PODSB'
+    filenamePrefix: 'PODSB',
+    excelTableName: ''
   },
   'pod-just': {
     code: 'pod-just',
     label: 'POD-Just',
     folderSuffix: 'POD-Just',
-    filenamePrefix: 'PODSB'
+    filenamePrefix: 'PODSB',
+    excelTableName: ''
   },
   'receipt-sb': {
     code: 'receipt-sb',
     label: 'Receipt-SB',
     folderSuffix: 'Receipt-SB',
-    filenamePrefix: 'RECSB'
+    filenamePrefix: 'RECSB',
+    excelTableName: 'Receipt_SB'
   },
   'receipt-just': {
     code: 'receipt-just',
     label: 'Receipt-Just',
     folderSuffix: 'Receipt-Just',
-    filenamePrefix: 'RECJUST'
+    filenamePrefix: 'RECJUST',
+    excelTableName: 'Receipt_Just'
   }
 };
 
@@ -205,6 +209,14 @@ function readJsonFile(filePath, fallbackValue) {
 function readJsonArrayFile(filePath) {
   const value = readJsonFile(filePath, []);
   return Array.isArray(value) ? value : [];
+}
+
+function readAppSettings() {
+  const settingsPath = path.join(settingsDir, 'app_settings.json');
+  return {
+    path: settingsPath,
+    value: readJsonFile(settingsPath, {})
+  };
 }
 
 function parseJsonBody(req) {
@@ -511,6 +523,8 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
   }
 
   const fileMeta = buildSubmissionFileMetadata(payload, mappedFolder);
+  const functionConfig = getFunctionConfig(payload.functionCode);
+  const isReceiptFunction = functionConfig.code === 'receipt-sb' || functionConfig.code === 'receipt-just';
   const folderParts = [powerAutomateTargetFolder || oneDrivePodRoot]
     .flatMap(part => String(part || '').split('/'))
     .flatMap(part => part.split('\\'))
@@ -523,7 +537,8 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
     fileMeta,
     requestPayload: {
       functionCode: getFunctionConfig(payload.functionCode).code,
-      functionLabel: getFunctionConfig(payload.functionCode).label,
+      functionLabel: functionConfig.label,
+      functionFolder: functionConfig.folderSuffix,
       driverId: payload.driverId || '',
       driverName: payload.driverName || '',
       folder: mappedFolder,
@@ -543,6 +558,21 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
       scanCount: payload.scanCount || 0,
       qualityWarnings: Array.isArray(payload.qualityWarnings) ? payload.qualityWarnings : [],
       extraFields: payload.extraFields || {},
+      excel: {
+        enabled: isReceiptFunction,
+        tableName: functionConfig.excelTableName,
+        row: isReceiptFunction ? {
+          vendorName: payload.vendorName || payload.invoiceNumber || '',
+          paymentMethod: payload.paymentMethod || '',
+          totalAmount: payload.totalAmount || payload.extraFields?.totalAmount || '',
+          vatAmount: payload.vatAmount || payload.extraFields?.vatAmount || '',
+          category: payload.category || payload.extraFields?.category || '',
+          receiptType: functionConfig.label,
+          timestamp: payload.timestamp || new Date().toISOString(),
+          driverName: payload.driverName || '',
+          driverId: payload.driverId || ''
+        } : {}
+      },
       pdfBase64: pdfBuffer.toString('base64')
     }
   };
@@ -706,6 +736,46 @@ const server = http.createServer(async (req, res) => {
     }
 
     sendJson(res, 200, sanitized);
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/settings/form') {
+    if (!isAuthorizedAdmin(req)) {
+      sendJson(res, 403, { error: 'Admin access required' });
+      return;
+    }
+
+    let payload;
+    try {
+      payload = await parseJsonBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid JSON payload' });
+      return;
+    }
+
+    const { path: settingsPath, value: appSettings } = readAppSettings();
+    const currentForm = appSettings.form && typeof appSettings.form === 'object' ? appSettings.form : {};
+    const nextForm = { ...currentForm };
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'receiptCategoryOptions')) {
+      const incoming = Array.isArray(payload.receiptCategoryOptions)
+        ? payload.receiptCategoryOptions
+        : [];
+      const sanitized = Array.from(new Set(incoming
+        .map(item => String(item || '').trim())
+        .filter(Boolean)));
+
+      if (!sanitized.length) {
+        sendJson(res, 400, { error: 'receiptCategoryOptions must include at least one category' });
+        return;
+      }
+
+      nextForm.receiptCategoryOptions = sanitized;
+    }
+
+    appSettings.form = nextForm;
+    fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2));
+    sendJson(res, 200, appSettings);
     return;
   }
 

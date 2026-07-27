@@ -133,11 +133,13 @@
       "cardHint": "Receipt capture",
       "colorClass": "fn-receipt-sb",
       "cardGradient": "linear-gradient(120deg, #ea580c, #f59e0b, #eab308)",
-      "documentPrefix": "RCPT-",
-      "documentLabel": "Receipt number",
-      "documentPlaceholder": "9931",
-      "documentPattern": "^\\d+$",
-      "documentPatternHint": "Numbers only. RCPT- is added automatically.",
+      "documentPrefix": "",
+      "documentLabel": "Vendor name",
+      "documentPlaceholder": "Type vendor name",
+      "documentPattern": "^.+$",
+      "documentPatternHint": "Type the vendor name.",
+      "documentInputMode": "text",
+      "documentNormalize": "spaced",
       "folderSuffix": "Receipt-SB",
       "filenamePrefix": "RECSB",
       "theme": {
@@ -160,10 +162,24 @@
       },
       "extraFields": [
         {
-          "key": "amount",
-          "label": "Receipt amount",
-          "type": "text",
+          "key": "totalAmount",
+          "label": "Total amount",
+          "type": "number",
           "placeholder": "1200.50",
+          "required": true
+        },
+        {
+          "key": "vatAmount",
+          "label": "VAT amount",
+          "type": "number",
+          "placeholder": "180.08",
+          "required": true
+        },
+        {
+          "key": "category",
+          "label": "Category",
+          "type": "select",
+          "optionsSource": "receiptCategoryOptions",
           "required": true
         }
       ]
@@ -176,11 +192,13 @@
       "cardHint": "Receipt alt fields",
       "colorClass": "fn-receipt-just",
       "cardGradient": "linear-gradient(120deg, #166534, #22c55e, #16a34a)",
-      "documentPrefix": "RCPT-",
-      "documentLabel": "Receipt number",
-      "documentPlaceholder": "9931",
-      "documentPattern": "^\\d+$",
-      "documentPatternHint": "Numbers only. RCPT- is added automatically.",
+      "documentPrefix": "",
+      "documentLabel": "Vendor name",
+      "documentPlaceholder": "Type vendor name",
+      "documentPattern": "^.+$",
+      "documentPatternHint": "Type the vendor name.",
+      "documentInputMode": "text",
+      "documentNormalize": "spaced",
       "folderSuffix": "Receipt-Just",
       "filenamePrefix": "RECJUST",
       "theme": {
@@ -203,10 +221,24 @@
       },
       "extraFields": [
         {
-          "key": "customerCode",
-          "label": "Customer code",
-          "type": "text",
-          "placeholder": "CUST-44",
+          "key": "totalAmount",
+          "label": "Total amount",
+          "type": "number",
+          "placeholder": "1200.50",
+          "required": true
+        },
+        {
+          "key": "vatAmount",
+          "label": "VAT amount",
+          "type": "number",
+          "placeholder": "180.08",
+          "required": true
+        },
+        {
+          "key": "category",
+          "label": "Category",
+          "type": "select",
+          "optionsSource": "receiptCategoryOptions",
           "required": true
         }
       ]
@@ -221,9 +253,15 @@
     "maxScanSidePx": 2200,
     "jpegQuality": 0.9,
     "paymentOptions": [
-      "EFT",
-      "Cash",
-      "S2S"
+      "Card",
+      "Cash"
+    ],
+    "receiptCategoryOptions": [
+      "Ingredients",
+      "Consumables",
+      "Packaging",
+      "Stationary",
+      "Other/Mixed"
     ]
   },
   "scanner": {

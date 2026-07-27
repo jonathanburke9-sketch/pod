@@ -27,7 +27,7 @@ Example paths:
 
 ```text
 POD_Uploads/Deon/POD-SB/2026/07/PODSB_INV-1042_20260725-101530.pdf
-POD_Uploads/Janine/Receipt-Just/2026/07/RECJUST_RCPT-9931_20260725-102200.pdf
+POD_Uploads/Janine/Receipt-Just/2026/07/RECJUST_Food-Lovers-Market_20260725-102200.pdf
 ```
 
 ## Where Routing Happens
@@ -130,14 +130,58 @@ POWER_AUTOMATE_FIXED_FOLDER_ONLY=false
 1. The browser uploads the queued PDF to the server.
 2. The server validates the function and staff folder.
 3. The server builds the function-aware relative path.
-4. The server posts PDF data and metadata to Power Automate.
-5. The flow creates the folder path and file in OneDrive or SharePoint.
+4. The server posts PDF data and function metadata to Power Automate.
+5. For receipt functions, the server also sends Excel-table row payload data.
+6. The flow creates the folder path and file in OneDrive or SharePoint.
+
+### Power Automate Payload Highlights
+
+Fields always sent for all 4 functions:
+
+- `functionCode`
+- `functionLabel`
+- `functionFolder`
+- `driverId`, `driverName`, `folder`
+- `invoiceNumber`
+- `paymentMethod`
+- `targetFolder`, `targetFileName`
+- `createFolder`, `fixedFolderOnly`, `renameOnly`
+- `timestamp`
+- `filename`
+- `relativePath`
+- `pdfBase64`
+
+Receipt-only Excel fields:
+
+- `excel.enabled`: true for `receipt-sb` and `receipt-just`
+- `excel.tableName`: `Receipt_SB` or `Receipt_Just`
+- `excel.row`: row values for Excel insert
+
+Expected receipt row keys:
+
+- `vendorName`
+- `paymentMethod` (Card or Cash)
+- `totalAmount`
+- `vatAmount`
+- `category`
+- `receiptType`
+- `timestamp`
+- `driverName`
+- `driverId`
+
+Flow tip:
+
+- Branch on `excel.enabled`.
+- If true, write `excel.row` to the `excel.tableName` table.
+- If false, skip the Excel step.
 
 ### Important Setting
 
 If you want separate folders per function, keep `POWER_AUTOMATE_FIXED_FOLDER_ONLY=false`.
 
 If you set `POWER_AUTOMATE_FIXED_FOLDER_ONLY=true`, the backend sends a fixed folder plus file name only, and the flow must decide how to route files itself.
+
+For full payload examples, see `docs/power-automate-contract.md`.
 
 ## Business OneDrive Graph Worker
 
@@ -196,7 +240,7 @@ Examples on disk:
 
 ```text
 C:\Users\ops\OneDrive\POD_Uploads\Deon\POD-SB\2026\07\PODSB_INV-1042_20260725-101530.pdf
-C:\Users\ops\OneDrive\POD_Uploads\Janine\Receipt-Just\2026\07\RECJUST_RCPT-9931_20260725-102200.pdf
+C:\Users\ops\OneDrive\POD_Uploads\Janine\Receipt-Just\2026\07\RECJUST_Food-Lovers-Market_20260725-102200.pdf
 ```
 
 ## Troubleshooting
@@ -211,6 +255,12 @@ C:\Users\ops\OneDrive\POD_Uploads\Janine\Receipt-Just\2026\07\RECJUST_RCPT-9931_
 
 - Set `POWER_AUTOMATE_FIXED_FOLDER_ONLY=false`.
 - Make sure the flow uses the incoming `relativePath` or `path` field.
+
+### Receipt uploads do not write to Excel
+
+- Confirm your flow checks `excel.enabled` before the Excel action.
+- Confirm table names exist exactly as `Receipt_SB` and `Receipt_Just`.
+- Confirm `excel.row.category` matches a valid category value.
 
 ### Worker mirrors old rows into flat folders
 

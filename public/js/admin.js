@@ -7,8 +7,10 @@ const driversBody = document.getElementById('driversBody');
 const addDriverBtn = document.getElementById('addDriverBtn');
 const removeDriverBtn = document.getElementById('removeDriverBtn');
 const saveDriversBtn = document.getElementById('saveDriversBtn');
+const saveCategoriesBtn = document.getElementById('saveCategoriesBtn');
 const driverSearch = document.getElementById('driverSearch');
 const sortOrder = document.getElementById('sortOrder');
+const categoryEditor = document.getElementById('categoryEditor');
 
 let settings = null;
 let drivers = [];
@@ -73,6 +75,17 @@ function applyAdminUi(settingsObj) {
     option.textContent = item.label;
     sortOrder.appendChild(option);
   });
+}
+
+function getReceiptCategoriesFromSettings() {
+  const options = settings?.form?.receiptCategoryOptions;
+  if (!Array.isArray(options) || !options.length) return [];
+  return options.map(item => String(item || '').trim()).filter(Boolean);
+}
+
+function renderCategoryEditor() {
+  if (!categoryEditor) return;
+  categoryEditor.value = getReceiptCategoriesFromSettings().join('\n');
 }
 
 function getSortedAndFilteredDrivers() {
@@ -187,6 +200,7 @@ async function loadSettings() {
       label: item.label || item.code
     })).filter(item => item.code)
     : defaultFunctionDefinitions;
+  renderCategoryEditor();
 }
 
 async function loadDrivers() {
@@ -254,9 +268,55 @@ async function saveDrivers() {
   adminStatus.textContent = 'Staff mapping saved to backend.';
 }
 
+async function saveCategories() {
+  const adminKey = adminKeyInput.value.trim();
+  if (!adminKey) {
+    adminStatus.textContent = 'Admin key is required.';
+    return;
+  }
+
+  const categoryLines = String(categoryEditor?.value || '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const uniqueCategories = Array.from(new Set(categoryLines));
+
+  if (!uniqueCategories.length) {
+    adminStatus.textContent = 'Add at least one category.';
+    return;
+  }
+
+  const response = await fetch('/api/admin/settings/form', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-admin-key': adminKey
+    },
+    body: JSON.stringify({
+      receiptCategoryOptions: uniqueCategories
+    })
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    adminStatus.textContent = `Category save failed. ${details || 'Check admin key.'}`;
+    return;
+  }
+
+  const updatedSettings = await response.json().catch(() => null);
+  if (updatedSettings && updatedSettings.form) {
+    settings.form = updatedSettings.form;
+  }
+  renderCategoryEditor();
+  adminStatus.textContent = 'Receipt categories saved.';
+}
+
 addDriverBtn.addEventListener('click', addDriver);
 removeDriverBtn.addEventListener('click', removeDriver);
 saveDriversBtn.addEventListener('click', saveDrivers);
+if (saveCategoriesBtn) {
+  saveCategoriesBtn.addEventListener('click', saveCategories);
+}
 driverSearch.addEventListener('input', renderTable);
 sortOrder.addEventListener('change', renderTable);
 

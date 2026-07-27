@@ -18,27 +18,87 @@ The Power Automate flow should accept this JSON body:
 
 ```json
 {
+  "functionCode": "receipt-sb",
+  "functionLabel": "Receipt-SB",
+  "functionFolder": "Receipt-SB",
   "driverId": "driver-002",
   "driverName": "Deon",
   "folder": "Deon",
-  "invoiceNumber": "INV-1042",
-  "paymentMethod": "EFT",
-  "notes": "Delivered to reception",
+  "invoiceNumber": "Vendor ABC",
+  "paymentMethod": "Card",
+  "notes": "",
   "timestamp": "2026-07-21T08:30:12.000Z",
-  "filename": "INV-1042_20260721-083012.pdf",
+  "filename": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "targetFolder": "POD_Uploads",
-  "targetFileName": "INV-1042_20260721-083012.pdf",
+  "targetFileName": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "createFolder": false,
   "fixedFolderOnly": true,
   "renameOnly": true,
-  "relativePath": "POD_Uploads/INV-1042_20260721-083012.pdf",
+  "relativePath": "POD_Uploads/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "year": "2026",
   "month": "07",
   "scanCount": 1,
   "qualityWarnings": [],
+  "extraFields": {
+    "totalAmount": "1200.50",
+    "vatAmount": "180.08",
+    "category": "Ingredients"
+  },
+  "excel": {
+    "enabled": true,
+    "tableName": "Receipt_SB",
+    "row": {
+      "vendorName": "Vendor ABC",
+      "paymentMethod": "Card",
+      "totalAmount": "1200.50",
+      "vatAmount": "180.08",
+      "category": "Ingredients",
+      "receiptType": "Receipt-SB",
+      "timestamp": "2026-07-21T08:30:12.000Z",
+      "driverName": "Deon",
+      "driverId": "driver-002"
+    }
+  },
   "pdfBase64": "JVBERi0xLjQK..."
 }
 ```
+
+## Function and Excel Fields
+
+These fields are always included for all 4 functions:
+
+- `functionCode`: one of `pod-sb`, `pod-just`, `receipt-sb`, `receipt-just`
+- `functionLabel`: display label for the selected function
+- `functionFolder`: folder suffix used for the function route
+- `targetFolder`: destination root folder used by the flow
+- `targetFileName`: final PDF file name
+- `createFolder`, `fixedFolderOnly`, `renameOnly`: folder behavior flags
+- `relativePath`: suggested path to use when function-based folders are enabled
+
+Excel integration fields are included for receipt functions only:
+
+- `excel.enabled`: `true` for `receipt-sb` and `receipt-just`, otherwise `false`
+- `excel.tableName`: `Receipt_SB` or `Receipt_Just`
+- `excel.row`: object containing values for the Excel table row
+
+The expected receipt row fields are:
+
+- `vendorName`
+- `paymentMethod` (Card or Cash)
+- `totalAmount`
+- `vatAmount`
+- `category`
+- `receiptType`
+- `timestamp`
+- `driverName`
+- `driverId`
+
+## Receipt Example for Excel Flow
+
+Use this branch condition in the flow before Excel actions:
+
+- Process receipt row when `excel.enabled` is `true`
+- Skip Excel action when `excel.enabled` is `false`
 
 ## Upload Semantics
 
@@ -69,6 +129,10 @@ Recognized fields:
 - `relativePath`: accepted alternative to `path`
 - `webUrl`: optional OneDrive/SharePoint link
 - `absoluteFilePath`: optional, mainly for local gateway/hybrid flows
+
+Optional echo fields your flow can return:
+
+- `excel`: object with write status, for example `{ "ok": true, "table": "Receipt_SB", "rowId": "42" }`
 
 ## Fixed Folder Configuration
 
