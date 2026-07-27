@@ -60,14 +60,12 @@ function applyAdminUi(settingsObj) {
   removeDriverBtn.textContent = admin.removeButton;
   saveDriversBtn.textContent = admin.saveButton;
 
-  driverSearch.placeholder = admin.searchPlaceholder || 'Search by driver or folder';
+  driverSearch.placeholder = 'Search by staff name';
 
   sortOrder.innerHTML = '';
   const options = [
     { value: 'name-asc', label: admin.sortNameAsc || 'Name A-Z' },
-    { value: 'name-desc', label: admin.sortNameDesc || 'Name Z-A' },
-    { value: 'folder-asc', label: admin.sortFolderAsc || 'Folder A-Z' },
-    { value: 'folder-desc', label: admin.sortFolderDesc || 'Folder Z-A' }
+    { value: 'name-desc', label: admin.sortNameDesc || 'Name Z-A' }
   ];
   options.forEach(item => {
     const option = document.createElement('option');
@@ -92,20 +90,15 @@ function getSortedAndFilteredDrivers() {
   const query = driverSearch.value.trim().toLowerCase();
   const filtered = drivers.filter(driver => {
     const name = (driver.name || '').toLowerCase();
-    const folder = (driver.folder || '').toLowerCase();
-    return !query || name.includes(query) || folder.includes(query);
+    return !query || name.includes(query);
   });
 
   const order = sortOrder.value;
   filtered.sort((a, b) => {
     const nameA = (a.name || '').toLowerCase();
     const nameB = (b.name || '').toLowerCase();
-    const folderA = (a.folder || '').toLowerCase();
-    const folderB = (b.folder || '').toLowerCase();
 
     if (order === 'name-desc') return nameB.localeCompare(nameA);
-    if (order === 'folder-asc') return folderA.localeCompare(folderB);
-    if (order === 'folder-desc') return folderB.localeCompare(folderA);
     return nameA.localeCompare(nameB);
   });
 
@@ -128,22 +121,13 @@ function renderTable() {
     });
 
     const nameCell = document.createElement('td');
-    const folderCell = document.createElement('td');
     const functionsCell = document.createElement('td');
 
     const nameInput = document.createElement('input');
     nameInput.value = driver.name;
     nameInput.addEventListener('input', e => {
       driver.name = e.target.value;
-      if (!driver.folder) {
-        driver.folder = e.target.value;
-      }
-    });
-
-    const folderInput = document.createElement('input');
-    folderInput.value = driver.folder || driver.name;
-    folderInput.addEventListener('input', e => {
-      driver.folder = e.target.value;
+      driver.folder = driver.folder || e.target.value;
     });
 
     const selectedFunctions = Array.isArray(driver.functions) && driver.functions.length
@@ -152,7 +136,7 @@ function renderTable() {
     driver.functions = selectedFunctions;
 
     const wraps = document.createElement('div');
-    wraps.className = 'chip-row';
+    wraps.className = 'chip-row admin-function-grid';
 
     functionDefinitions.forEach(def => {
       const label = document.createElement('label');
@@ -180,10 +164,8 @@ function renderTable() {
     });
 
     nameCell.appendChild(nameInput);
-    folderCell.appendChild(folderInput);
     functionsCell.appendChild(wraps);
     row.appendChild(nameCell);
-    row.appendChild(folderCell);
     row.appendChild(functionsCell);
     driversBody.appendChild(row);
   });

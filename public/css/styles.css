@@ -389,6 +389,29 @@ button.secondary {
   gap: 10px;
 }
 
+.admin-function-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+}
+
+.admin-function-grid .toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.admin-function-grid .toggle-row span {
+  overflow-wrap: anywhere;
+}
+
 .function-grid {
   display: grid;
   gap: 10px;
@@ -513,6 +536,25 @@ body.function-receipt-just {
 @media (min-width: 700px) {
   .admin-toolbar {
     grid-template-columns: 2fr 1fr;
+  }
+}
+
+@media (max-width: 699px) {
+  .table th,
+  .table td {
+    padding: 8px 6px;
+    vertical-align: top;
+  }
+
+  .table td input {
+    padding: 10px 10px;
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .admin-function-grid {
+    grid-template-columns: 1fr;
   }
 }
 
