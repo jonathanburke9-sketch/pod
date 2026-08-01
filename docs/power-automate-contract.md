@@ -29,12 +29,14 @@ The Power Automate flow should accept this JSON body:
   "notes": "",
   "timestamp": "2026-07-21T08:30:12.000Z",
   "filename": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
-  "targetFolder": "POD_Uploads",
+  "targetFolder": "POD_Uploads/Inbox",
   "targetFileName": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "createFolder": false,
   "fixedFolderOnly": true,
   "renameOnly": true,
-  "relativePath": "POD_Uploads/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "relativePath": "POD_Uploads/Inbox/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "suggestedFinalRelativePath": "POD_Uploads/Deon/Receipt-SB/2026/07/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "inboxFolder": "POD_Uploads/Inbox",
   "year": "2026",
   "month": "07",
   "scanCount": 1,
@@ -73,7 +75,9 @@ These fields are always included for all 4 functions:
 - `targetFolder`: destination root folder used by the flow
 - `targetFileName`: final PDF file name
 - `createFolder`, `fixedFolderOnly`, `renameOnly`: folder behavior flags
-- `relativePath`: suggested path to use when function-based folders are enabled
+- `relativePath`: fixed Inbox path where the file should be created first
+- `suggestedFinalRelativePath`: backend suggestion for the final function-based destination path
+- `inboxFolder`: Inbox destination root used for initial file creation
 
 Excel integration fields are included for receipt functions only:
 
@@ -105,10 +109,13 @@ Use this branch condition in the flow before Excel actions:
 The flow should:
 
 1. Parse the JSON body.
-2. Use `targetFolder` as a pre-existing fixed folder path.
+2. Use `targetFolder` (recommended: `POD_Uploads/Inbox`) as a pre-existing fixed Inbox path.
 3. Do **not** create new folders when `createFolder` is `false`.
-4. Decode `pdfBase64` and create the file using `targetFileName` (rename-only behavior in that fixed folder).
-5. Return success details to the backend.
+4. Decode `pdfBase64` and create the file in Inbox using `targetFileName`.
+5. Branch by `functionCode` for `POD-SB`, `POD-Just`, `Receipt-SB`, `Receipt-Just`.
+6. For receipt functions (`excel.enabled=true`), write `excel.row` into `excel.tableName`.
+7. Move the file from Inbox to the final path using `suggestedFinalRelativePath` (or your own mapping logic).
+8. Return success details to the backend.
 
 ## Upload Success Response
 
@@ -140,6 +147,11 @@ The backend can be configured with:
 
 - `POWER_AUTOMATE_TARGET_FOLDER`: fixed destination folder, e.g. `POD_Uploads` or `POD_Uploads/Inbound`
 - `POWER_AUTOMATE_FIXED_FOLDER_ONLY`: defaults to `true`; when true, backend sends `createFolder=false`, `renameOnly=true`, and sets `relativePath` to `targetFolder/targetFileName`
+
+Recommended for the original path behavior:
+
+- `POWER_AUTOMATE_TARGET_FOLDER=POD_Uploads/Inbox`
+- `POWER_AUTOMATE_FIXED_FOLDER_ONLY=true`
 
 ## Upload Failure Response
 

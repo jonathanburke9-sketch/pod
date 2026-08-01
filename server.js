@@ -26,6 +26,7 @@ const powerAutomateUrl = process.env.POWER_AUTOMATE_URL || '';
 const powerAutomateSharedSecret = process.env.POWER_AUTOMATE_SHARED_SECRET || '';
 const powerAutomateTargetFolder = String(process.env.POWER_AUTOMATE_TARGET_FOLDER || '').trim();
 const powerAutomateFixedFolderOnly = String(process.env.POWER_AUTOMATE_FIXED_FOLDER_ONLY || 'true').toLowerCase() !== 'false';
+const powerAutomateDefaultInboxFolder = `${String(oneDrivePodRoot || 'POD_Uploads').trim().replace(/[\\/]+$/, '')}/Inbox`;
 const isVercelRuntime = Boolean(process.env.VERCEL);
 const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE
   || (isVercelRuntime ? 'power-automate' : (powerAutomateUrl ? 'power-automate' : 'filesystem'));
@@ -525,7 +526,7 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
   const fileMeta = buildSubmissionFileMetadata(payload, mappedFolder);
   const functionConfig = getFunctionConfig(payload.functionCode);
   const isReceiptFunction = functionConfig.code === 'receipt-sb' || functionConfig.code === 'receipt-just';
-  const folderParts = [powerAutomateTargetFolder || oneDrivePodRoot]
+  const folderParts = [powerAutomateTargetFolder || powerAutomateDefaultInboxFolder]
     .flatMap(part => String(part || '').split('/'))
     .flatMap(part => part.split('\\'))
     .map(part => part.trim())
@@ -553,6 +554,8 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
       fixedFolderOnly: powerAutomateFixedFolderOnly,
       renameOnly: powerAutomateFixedFolderOnly,
       relativePath: powerAutomateFixedFolderOnly ? fixedRelativePath : fileMeta.relativePath,
+      suggestedFinalRelativePath: fileMeta.relativePath,
+      inboxFolder: targetFolder,
       year: fileMeta.timeParts.year,
       month: fileMeta.timeParts.month,
       scanCount: payload.scanCount || 0,

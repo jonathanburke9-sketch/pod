@@ -121,18 +121,19 @@ Use this when the backend should hand the PDF directly to a Power Automate HTTP 
 UPLOAD_MIRROR_MODE=power-automate
 POWER_AUTOMATE_URL=https://prod-00.westeurope.logic.azure.com:443/workflows/...
 POWER_AUTOMATE_SHARED_SECRET=replace_with_shared_secret
-POWER_AUTOMATE_TARGET_FOLDER=POD_Uploads
-POWER_AUTOMATE_FIXED_FOLDER_ONLY=false
+POWER_AUTOMATE_TARGET_FOLDER=POD_Uploads/Inbox
+POWER_AUTOMATE_FIXED_FOLDER_ONLY=true
 ```
 
 ### Flow
 
 1. The browser uploads the queued PDF to the server.
 2. The server validates the function and staff folder.
-3. The server builds the function-aware relative path.
+3. The server computes the final function-aware destination path for routing.
 4. The server posts PDF data and function metadata to Power Automate.
-5. For receipt functions, the server also sends Excel-table row payload data.
-6. The flow creates the folder path and file in OneDrive or SharePoint.
+5. The flow first creates the file in `POD_Uploads/Inbox`.
+6. The flow branches by function (`POD-SB`, `POD-Just`, `Receipt-SB`, `Receipt-Just`) and writes Excel for receipt functions.
+7. The flow moves the file from Inbox to its final destination.
 
 ### Power Automate Payload Highlights
 
@@ -149,6 +150,7 @@ Fields always sent for all 4 functions:
 - `timestamp`
 - `filename`
 - `relativePath`
+- `suggestedFinalRelativePath` (backend suggestion for final move destination)
 - `pdfBase64`
 
 Receipt-only Excel fields:
@@ -177,9 +179,9 @@ Flow tip:
 
 ### Important Setting
 
-If you want separate folders per function, keep `POWER_AUTOMATE_FIXED_FOLDER_ONLY=false`.
+For the Inbox-first model, keep `POWER_AUTOMATE_FIXED_FOLDER_ONLY=true` and set `POWER_AUTOMATE_TARGET_FOLDER=POD_Uploads/Inbox`.
 
-If you set `POWER_AUTOMATE_FIXED_FOLDER_ONLY=true`, the backend sends a fixed folder plus file name only, and the flow must decide how to route files itself.
+With this setting, the backend sends a fixed Inbox target and also includes `suggestedFinalRelativePath` so the flow can move files to the original function-based path.
 
 For full payload examples, see `docs/power-automate-contract.md`.
 
