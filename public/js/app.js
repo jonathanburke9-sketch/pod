@@ -62,7 +62,7 @@ const queueDbVersion = 1;
 const defaultFunctionConfigs = [
   {
     code: 'pod-sb',
-    label: 'POD-SB',
+    label: 'Sugarberry POD',
     documentPrefix: 'INV-',
     documentLabel: 'Invoice number',
     documentPlaceholder: '1042',
@@ -73,7 +73,7 @@ const defaultFunctionConfigs = [
   },
   {
     code: 'pod-just',
-    label: 'POD-Just',
+    label: 'Just POD',
     documentPrefix: 'INV-',
     documentLabel: 'Invoice number',
     documentPlaceholder: '1042',
@@ -84,7 +84,7 @@ const defaultFunctionConfigs = [
   },
   {
     code: 'receipt-sb',
-    label: 'Receipt-SB',
+    label: 'Sugarberry Receipts',
     documentPrefix: '',
     documentLabel: 'Vendor name',
     documentPlaceholder: 'Type vendor name',
@@ -92,7 +92,7 @@ const defaultFunctionConfigs = [
     documentPatternHint: 'Type the vendor name.',
     documentInputMode: 'text',
     documentNormalize: 'spaced',
-    filenamePrefix: 'RECSB',
+    filenamePrefix: 'SBR_',
     extraFields: [
       {
         key: 'totalAmount',
@@ -119,7 +119,7 @@ const defaultFunctionConfigs = [
   },
   {
     code: 'receipt-just',
-    label: 'Receipt-Just',
+    label: 'Just Receipts',
     documentPrefix: '',
     documentLabel: 'Vendor name',
     documentPlaceholder: 'Type vendor name',
@@ -127,7 +127,7 @@ const defaultFunctionConfigs = [
     documentPatternHint: 'Type the vendor name.',
     documentInputMode: 'text',
     documentNormalize: 'spaced',
-    filenamePrefix: 'RECJUST',
+    filenamePrefix: 'JUSR-',
     extraFields: [
       {
         key: 'totalAmount',
@@ -1237,9 +1237,13 @@ function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
   const dateToken = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   const timeToken = `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
-  const functionPrefix = entry.functionCode ? String(entry.functionCode).toUpperCase() : 'POD';
+  const functionPrefix = entry.filenamePrefix
+    ? String(entry.filenamePrefix)
+    : (entry.functionCode ? String(entry.functionCode).toUpperCase() : 'POD');
   const documentNumber = entry.invoiceNumber || entry.documentNumber || 'DOC-UNKNOWN';
-  return `${functionPrefix}-${documentNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
+  const prefixNeedsSeparator = functionPrefix && !/[-_]$/.test(functionPrefix);
+  const prefixPart = `${functionPrefix}${prefixNeedsSeparator ? '-' : ''}`;
+  return `${prefixPart}${documentNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
 function refreshQueueCount() {
@@ -1353,6 +1357,7 @@ async function enqueueEntry() {
     folder: selectedDriver.folder || selectedDriver.name,
     functionCode: activeFunctionConfig.code,
     functionLabel: activeFunctionConfig.label,
+    filenamePrefix: activeFunctionConfig.filenamePrefix || '',
     isReceiptFunction,
     invoiceNumber,
     documentNumber: invoiceNumber,

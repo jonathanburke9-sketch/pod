@@ -19,27 +19,27 @@ const syncTargetMode = process.env.SYNC_TARGET_MODE
 const functionConfigs = {
   'pod-sb': {
     code: 'pod-sb',
-    label: 'POD-SB',
+    label: 'Sugarberry POD',
     folderSuffix: 'POD-SB',
     filenamePrefix: 'PODSB'
   },
   'pod-just': {
     code: 'pod-just',
-    label: 'POD-Just',
+    label: 'Just POD',
     folderSuffix: 'POD-Just',
     filenamePrefix: 'PODSB'
   },
   'receipt-sb': {
     code: 'receipt-sb',
-    label: 'Receipt-SB',
+    label: 'Sugarberry Receipts',
     folderSuffix: 'Receipt-SB',
-    filenamePrefix: 'RECSB'
+    filenamePrefix: 'SBR_'
   },
   'receipt-just': {
     code: 'receipt-just',
-    label: 'Receipt-Just',
+    label: 'Just Receipts',
     folderSuffix: 'Receipt-Just',
-    filenamePrefix: 'RECJUST'
+    filenamePrefix: 'JUSR-'
   }
 };
 

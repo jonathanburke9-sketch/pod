@@ -419,12 +419,14 @@ button.secondary {
 }
 
 .function-card {
-  text-align: left;
+  text-align: center;
   border-radius: 18px;
   min-height: 84px;
   padding: 14px;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -446,11 +448,13 @@ button.secondary {
 
 .function-card strong {
   font-size: 1rem;
+  text-align: center;
 }
 
 .function-card span {
   font-size: 0.85rem;
   opacity: 0.92;
+  text-align: center;
 }
 
 .function-card.has-left-icon {

@@ -37,30 +37,30 @@ const powerAutomateConfigError = uploadMirrorMode === 'power-automate' && !power
 const functionConfigs = {
   'pod-sb': {
     code: 'pod-sb',
-    label: 'POD-SB',
+    label: 'Sugarberry POD',
     folderSuffix: 'POD-SB',
     filenamePrefix: 'PODSB',
     excelTableName: ''
   },
   'pod-just': {
     code: 'pod-just',
-    label: 'POD-Just',
+    label: 'Just POD',
     folderSuffix: 'POD-Just',
     filenamePrefix: 'PODSB',
     excelTableName: ''
   },
   'receipt-sb': {
     code: 'receipt-sb',
-    label: 'Receipt-SB',
+    label: 'Sugarberry Receipts',
     folderSuffix: 'Receipt-SB',
-    filenamePrefix: 'RECSB',
+    filenamePrefix: 'SBR_',
     excelTableName: 'Receipt_SB'
   },
   'receipt-just': {
     code: 'receipt-just',
-    label: 'Receipt-Just',
+    label: 'Just Receipts',
     folderSuffix: 'Receipt-Just',
-    filenamePrefix: 'RECJUST',
+    filenamePrefix: 'JUSR-',
     excelTableName: 'Receipt_Just'
   }
 };

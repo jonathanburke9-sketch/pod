@@ -48,10 +48,10 @@ function getBoundStaff() {
 function getFunctionDefinitions() {
   const configured = Array.isArray(settings?.functions) ? settings.functions : [];
   return configured.length ? configured : [
-    { code: 'pod-sb', label: 'POD-SB', cardHint: 'Current flow', colorClass: 'fn-pod-sb' },
-    { code: 'pod-just', label: 'POD-Just', cardHint: 'Alt POD fields', colorClass: 'fn-pod-just' },
-    { code: 'receipt-sb', label: 'Receipt-SB', cardHint: 'Receipt capture', colorClass: 'fn-receipt-sb' },
-    { code: 'receipt-just', label: 'Receipt-Just', cardHint: 'Receipt alt fields', colorClass: 'fn-receipt-just' }
+    { code: 'pod-sb', label: 'Sugarberry POD', cardHint: 'Capture Sugarberry PODs', colorClass: 'fn-pod-sb' },
+    { code: 'pod-just', label: 'Just POD', cardHint: 'Capture Just PODs', colorClass: 'fn-pod-just' },
+    { code: 'receipt-sb', label: 'Sugarberry Receipts', cardHint: 'Capture Sugarberry vendor receipts', colorClass: 'fn-receipt-sb' },
+    { code: 'receipt-just', label: 'Just Receipts', cardHint: 'Capture Just vendor receipts', colorClass: 'fn-receipt-just' }
   ];
 }
 
@@ -199,11 +199,17 @@ function renderConfiguredFunctionCards() {
     }
     button.dataset.functionCode = def.code;
     button.type = 'button';
-    button.classList.add('icon-only');
+    button.classList.add('with-heading');
     const iconSrc = def.iconSrc || '/icons/sugarberry-s.png';
-    const iconLabel = def.buttonLabel || def.label || def.code;
+    const heading = def.buttonLabel || def.label || def.code;
+    const description = def.cardHint || 'Open function';
+    const iconLabel = heading;
     button.setAttribute('aria-label', String(iconLabel || 'Function'));
-    button.innerHTML = `<img class="function-only-icon" src="${iconSrc}" alt="${String(iconLabel || 'Function icon')}" />`;
+    button.innerHTML = `
+      <img class="function-only-icon" src="${iconSrc}" alt="${String(iconLabel || 'Function icon')}" />
+      <strong class="function-heading">${String(heading)}</strong>
+      <span class="function-description">${String(description)}</span>
+    `;
     button.addEventListener('click', () => openFunction(String(def.code || '').toLowerCase()));
     functionGrid.appendChild(button);
   });
