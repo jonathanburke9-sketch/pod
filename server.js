@@ -53,7 +53,7 @@ const functionConfigs = {
     code: 'receipt-sb',
     label: 'Sugarberry Receipts',
     folderSuffix: 'Receipt-SB',
-    filenamePrefix: 'SBR_',
+    filenamePrefix: 'SBR-',
     excelTableName: 'Receipt_SB'
   },
   'receipt-just': {

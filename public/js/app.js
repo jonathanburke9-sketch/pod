@@ -92,7 +92,7 @@ const defaultFunctionConfigs = [
     documentPatternHint: 'Type the vendor name.',
     documentInputMode: 'text',
     documentNormalize: 'spaced',
-    filenamePrefix: 'SBR_',
+    filenamePrefix: 'SBR-',
     extraFields: [
       {
         key: 'totalAmount',
@@ -318,6 +318,21 @@ function applyFunctionUi() {
   });
 
   const label = activeFunctionConfig.label || activeFunctionConfig.code;
+  const functionDescription = activeFunctionConfig.captureDescription
+    || activeFunctionConfig.cardHint
+    || settings?.ui?.subtitle
+    || '';
+  const appTitleEl = document.getElementById('appTitle');
+  const subtitleEl = document.getElementById('subtitle');
+
+  if (appTitleEl) {
+    appTitleEl.textContent = label;
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = functionDescription;
+    subtitleEl.classList.toggle('hidden', !String(functionDescription).trim());
+  }
+
   if (functionBadge) {
     functionBadge.textContent = `Function: ${label}`;
   }

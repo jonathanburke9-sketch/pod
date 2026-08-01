@@ -19,7 +19,7 @@ The Power Automate flow should accept this JSON body:
 ```json
 {
   "functionCode": "receipt-sb",
-  "functionLabel": "Receipt-SB",
+  "functionLabel": "Sugarberry Receipts",
   "functionFolder": "Receipt-SB",
   "driverId": "driver-002",
   "driverName": "Deon",
@@ -28,14 +28,14 @@ The Power Automate flow should accept this JSON body:
   "paymentMethod": "Card",
   "notes": "",
   "timestamp": "2026-07-21T08:30:12.000Z",
-  "filename": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "filename": "SBR-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "targetFolder": "POD_Uploads/Inbox",
-  "targetFileName": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "targetFileName": "SBR-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "createFolder": false,
   "fixedFolderOnly": true,
   "renameOnly": true,
-  "relativePath": "POD_Uploads/Inbox/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
-  "suggestedFinalRelativePath": "POD_Uploads/Deon/Receipt-SB/2026/07/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "relativePath": "POD_Uploads/Inbox/SBR-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+  "suggestedFinalRelativePath": "POD_Uploads/Deon/Receipt-SB/2026/07/SBR-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "inboxFolder": "POD_Uploads/Inbox",
   "year": "2026",
   "month": "07",
@@ -55,7 +55,7 @@ The Power Automate flow should accept this JSON body:
       "totalAmount": "1200.50",
       "vatAmount": "180.08",
       "category": "Ingredients",
-      "receiptType": "Receipt-SB",
+      "receiptType": "Sugarberry Receipts",
       "timestamp": "2026-07-21T08:30:12.000Z",
       "driverName": "Deon",
       "driverId": "driver-002"
@@ -112,7 +112,7 @@ The flow should:
 2. Use `targetFolder` (recommended: `POD_Uploads/Inbox`) as a pre-existing fixed Inbox path.
 3. Do **not** create new folders when `createFolder` is `false`.
 4. Decode `pdfBase64` and create the file in Inbox using `targetFileName`.
-5. Branch by `functionCode` for `POD-SB`, `POD-Just`, `Receipt-SB`, `Receipt-Just`.
+5. Branch by `functionCode` for `Sugarberry POD`, `Just POD`, `Sugarberry Receipts`, `Just Receipts`.
 6. For receipt functions (`excel.enabled=true`), write `excel.row` into `excel.tableName`.
 7. Move the file from Inbox to the final path using `suggestedFinalRelativePath` (or your own mapping logic).
 8. Return success details to the backend.
