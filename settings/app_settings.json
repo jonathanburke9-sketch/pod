@@ -64,12 +64,18 @@
       "colorClass": "fn-pod-sb",
       "cardGradient": "linear-gradient(120deg, #c026d3, #e11d48, #f97316)",
       "documentPrefix": "INV-",
+      "documentDisplayPrefix": "INV-",
       "documentLabel": "Invoice number",
       "documentPlaceholder": "1042",
       "documentPattern": "^\\d+$",
       "documentPatternHint": "Numbers only. INV- is added automatically.",
       "folderSuffix": "POD-SB",
       "filenamePrefix": "PODSB",
+      "paymentOptions": [
+        "EFT",
+        "Cash",
+        "S2S"
+      ],
       "theme": {
         "bg": "#110312",
         "bgSpot1": "rgba(217, 31, 111, 0.28)",
@@ -99,12 +105,18 @@
       "colorClass": "fn-pod-just",
       "cardGradient": "linear-gradient(120deg, #0f766e, #0ea5e9, #2563eb)",
       "documentPrefix": "INV-",
+      "documentDisplayPrefix": "INV-",
       "documentLabel": "Invoice number",
       "documentPlaceholder": "1042",
       "documentPattern": "^\\d+$",
       "documentPatternHint": "Numbers only. INV- is added automatically.",
       "folderSuffix": "POD-Just",
       "filenamePrefix": "PODSB",
+      "paymentOptions": [
+        "EFT",
+        "Cash",
+        "S2S"
+      ],
       "theme": {
         "bg": "#061621",
         "bgSpot1": "rgba(14, 165, 233, 0.28)",
@@ -134,6 +146,7 @@
       "colorClass": "fn-receipt-sb",
       "cardGradient": "linear-gradient(120deg, #ea580c, #f59e0b, #eab308)",
       "documentPrefix": "",
+      "documentDisplayPrefix": "SBR-",
       "documentLabel": "Vendor name",
       "documentPlaceholder": "Type vendor name",
       "documentPattern": "^.+$",
@@ -193,6 +206,7 @@
       "colorClass": "fn-receipt-just",
       "cardGradient": "linear-gradient(120deg, #166534, #22c55e, #16a34a)",
       "documentPrefix": "",
+      "documentDisplayPrefix": "JUSR-",
       "documentLabel": "Vendor name",
       "documentPlaceholder": "Type vendor name",
       "documentPattern": "^.+$",

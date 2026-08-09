@@ -64,28 +64,33 @@ const defaultFunctionConfigs = [
     code: 'pod-sb',
     label: 'Sugarberry POD',
     documentPrefix: 'INV-',
+    documentDisplayPrefix: 'INV-',
     documentLabel: 'Invoice number',
     documentPlaceholder: '1042',
     documentPattern: '^\\d+$',
     documentPatternHint: 'Numbers only. INV- is added automatically.',
     filenamePrefix: 'PODSB',
+    paymentOptions: ['EFT', 'Cash', 'S2S'],
     extraFields: []
   },
   {
     code: 'pod-just',
     label: 'Just POD',
     documentPrefix: 'INV-',
+    documentDisplayPrefix: 'INV-',
     documentLabel: 'Invoice number',
     documentPlaceholder: '1042',
     documentPattern: '^\\d+$',
     documentPatternHint: 'Numbers only. INV- is added automatically.',
     filenamePrefix: 'PODSB',
+    paymentOptions: ['EFT', 'Cash', 'S2S'],
     extraFields: []
   },
   {
     code: 'receipt-sb',
     label: 'Sugarberry Receipts',
     documentPrefix: '',
+    documentDisplayPrefix: 'SBR-',
     documentLabel: 'Vendor name',
     documentPlaceholder: 'Type vendor name',
     documentPattern: '^.+$',
@@ -121,6 +126,7 @@ const defaultFunctionConfigs = [
     code: 'receipt-just',
     label: 'Just Receipts',
     documentPrefix: '',
+    documentDisplayPrefix: 'JUSR-',
     documentLabel: 'Vendor name',
     documentPlaceholder: 'Type vendor name',
     documentPattern: '^.+$',
@@ -338,7 +344,10 @@ function applyFunctionUi() {
   }
 
   if (documentPrefixEl) {
-    documentPrefixEl.textContent = activeFunctionConfig.documentPrefix || 'INV-';
+    const displayPrefix = activeFunctionConfig.documentDisplayPrefix
+      ?? activeFunctionConfig.documentPrefix
+      ?? 'INV-';
+    documentPrefixEl.textContent = displayPrefix;
   }
 
   const documentLabel = activeFunctionConfig.documentLabel || settings?.ui?.invoiceLabel || 'Document number';
@@ -382,8 +391,11 @@ function applyUiSettings(ui) {
 }
 
 function applyPaymentOptions(form) {
+  const options = Array.isArray(activeFunctionConfig?.paymentOptions) && activeFunctionConfig.paymentOptions.length
+    ? activeFunctionConfig.paymentOptions
+    : form.paymentOptions;
   paymentMethodSelect.innerHTML = '';
-  form.paymentOptions.forEach(optionValue => {
+  options.forEach(optionValue => {
     const option = document.createElement('option');
     option.value = optionValue;
     option.textContent = optionValue;
@@ -558,8 +570,9 @@ async function startCamera(forceRestart = false) {
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: currentFacingMode },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+        frameRate: { ideal: 24, max: 30 }
       },
       audio: false
     });
@@ -856,6 +869,8 @@ function optimizeScanCanvas(sourceCanvas) {
   optimizedCanvas.width = targetWidth;
   optimizedCanvas.height = targetHeight;
   const optimizedContext = optimizedCanvas.getContext('2d');
+  optimizedContext.imageSmoothingEnabled = true;
+  optimizedContext.imageSmoothingQuality = 'high';
   optimizedContext.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
   return optimizedCanvas.toDataURL('image/jpeg', jpegQuality);
 }
@@ -864,6 +879,8 @@ function processScanFromCurrentFrame(useEdgeCrop) {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   let detectedBounds = null;
@@ -1336,7 +1353,7 @@ async function enqueueEntry() {
     statusEl.textContent = `${activeFunctionConfig.documentLabel || 'Document field'} is invalid.`;
     return;
   }
-  const documentPrefix = activeFunctionConfig.documentPrefix || 'INV-';
+  const documentPrefix = activeFunctionConfig.documentPrefix ?? 'INV-';
   const invoiceNumber = `${documentPrefix}${normalizedDocumentValue}`;
 
   const extraFields = {};
@@ -1418,7 +1435,10 @@ async function enqueueEntry() {
   Object.values(dynamicFieldInputs).forEach(input => {
     input.value = '';
   });
-  paymentMethodSelect.value = settings.form.paymentOptions[0] || '';
+  const defaultPaymentOptions = Array.isArray(activeFunctionConfig?.paymentOptions) && activeFunctionConfig.paymentOptions.length
+    ? activeFunctionConfig.paymentOptions
+    : settings.form.paymentOptions;
+  paymentMethodSelect.value = defaultPaymentOptions[0] || '';
   capturedScans = [];
   refreshScanSummary();
 }
