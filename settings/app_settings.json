@@ -111,7 +111,7 @@
       "documentPattern": "^\\d+$",
       "documentPatternHint": "Numbers only. INV- is added automatically.",
       "folderSuffix": "POD-Just",
-      "filenamePrefix": "PODSB",
+      "filenamePrefix": "JUSPOD",
       "paymentOptions": [
         "EFT",
         "Cash",

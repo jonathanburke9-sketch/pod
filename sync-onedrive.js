@@ -27,7 +27,7 @@ const functionConfigs = {
     code: 'pod-just',
     label: 'Just POD',
     folderSuffix: 'POD-Just',
-    filenamePrefix: 'PODSB'
+    filenamePrefix: 'JUSPOD'
   },
   'receipt-sb': {
     code: 'receipt-sb',

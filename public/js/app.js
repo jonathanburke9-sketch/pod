@@ -82,7 +82,7 @@ const defaultFunctionConfigs = [
     documentPlaceholder: '1042',
     documentPattern: '^\\d+$',
     documentPatternHint: 'Numbers only. INV- is added automatically.',
-    filenamePrefix: 'PODSB',
+    filenamePrefix: 'JUSPOD',
     paymentOptions: ['EFT', 'Cash', 'S2S'],
     extraFields: []
   },
