@@ -115,7 +115,10 @@ function renderTable() {
       row.classList.add('selected');
     }
 
-    row.addEventListener('click', () => {
+    row.addEventListener('click', event => {
+      // Ignore clicks on interactive controls (checkboxes, inputs) so their own
+      // change handlers aren't clobbered by a row re-render before they apply.
+      if (event.target.closest('input, label, textarea, select, button')) return;
       selectedDriverId = driver.id;
       renderTable();
     });
