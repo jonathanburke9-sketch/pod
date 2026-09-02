@@ -220,6 +220,42 @@ function readAppSettings() {
   };
 }
 
+async function getFormSettingsFromSupabase() {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('id', 'form')
+    .maybeSingle();
+
+  if (error) {
+    if (/relation .*app_settings.* does not exist|could not find the table/i.test(error.message || '')) {
+      return null;
+    }
+    throw error;
+  }
+
+  return data && data.value && typeof data.value === 'object' ? data.value : null;
+}
+
+async function upsertFormSettingsToSupabase(nextForm) {
+  if (!supabase) return { persisted: false };
+
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ id: 'form', value: nextForm }, { onConflict: 'id' });
+
+  if (error) {
+    if (/relation .*app_settings.* does not exist|could not find the table/i.test(error.message || '')) {
+      return { persisted: false, missingTable: true };
+    }
+    throw error;
+  }
+
+  return { persisted: true };
+}
+
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     const configuredMaxMb = Number(process.env.UPLOAD_MAX_MB || '50');
@@ -269,11 +305,20 @@ async function getDriversFromSupabase() {
     (Array.isArray(localDrivers) ? localDrivers : []).map(driver => [driver.id, driver])
   );
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('drivers')
-    .select('id, name, folder, active')
+    .select('id, name, folder, active, functions')
     .eq('active', true)
     .order('name', { ascending: true });
+
+  if (error && /column .*functions.* does not exist/i.test(error.message || '')) {
+    // Table predates the functions column; fall back until it's added (see docs/power-automate-contract.md).
+    ({ data, error } = await supabase
+      .from('drivers')
+      .select('id, name, folder, active')
+      .eq('active', true)
+      .order('name', { ascending: true }));
+  }
 
   if (error) {
     throw error;
@@ -283,7 +328,7 @@ async function getDriversFromSupabase() {
     id: driver.id,
     name: driver.name,
     folder: driver.folder,
-    functions: sanitizeFunctionCodes(localById.get(driver.id)?.functions)
+    functions: sanitizeFunctionCodes(driver.functions ?? localById.get(driver.id)?.functions)
   }));
 }
 
@@ -294,12 +339,19 @@ async function upsertDriversToSupabase(drivers) {
     id: driver.id,
     name: driver.name,
     folder: driver.folder,
-    active: true
+    active: true,
+    functions: Array.isArray(driver.functions) ? driver.functions : []
   }));
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('drivers')
     .upsert(records, { onConflict: 'id' });
+
+  if (error && /column .*functions.* does not exist/i.test(error.message || '')) {
+    // Table predates the functions column; upsert without it so name/folder edits still save.
+    const legacyRecords = records.map(({ functions, ...rest }) => rest);
+    ({ error } = await supabase.from('drivers').upsert(legacyRecords, { onConflict: 'id' }));
+  }
 
   if (error) {
     throw error;
@@ -769,7 +821,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     const { path: settingsPath, value: appSettings } = readAppSettings();
-    const currentForm = appSettings.form && typeof appSettings.form === 'object' ? appSettings.form : {};
+    let currentForm = appSettings.form && typeof appSettings.form === 'object' ? appSettings.form : {};
+
+    if (supabase) {
+      try {
+        const supabaseForm = await getFormSettingsFromSupabase();
+        if (supabaseForm) currentForm = { ...currentForm, ...supabaseForm };
+      } catch (error) {
+        console.error('Failed to read current form settings from Supabase.', error.message);
+      }
+    }
+
     const nextForm = { ...currentForm };
 
     if (Object.prototype.hasOwnProperty.call(payload, 'receiptCategoryOptions')) {
@@ -789,7 +851,36 @@ const server = http.createServer(async (req, res) => {
     }
 
     appSettings.form = nextForm;
-    fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2));
+
+    // Local file cache is best-effort; the packaged settings dir is read-only on Vercel.
+    let localWriteError = null;
+    try {
+      fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2));
+    } catch (error) {
+      localWriteError = error.message;
+      console.error('Failed to write local settings cache (filesystem may be read-only).', error.message);
+    }
+
+    let supabaseOutcome = null;
+    if (supabase) {
+      try {
+        supabaseOutcome = await upsertFormSettingsToSupabase(nextForm);
+      } catch (error) {
+        sendJson(res, 500, { error: `Failed to save categories to Supabase: ${error.message}` });
+        return;
+      }
+
+      if (supabaseOutcome.missingTable) {
+        sendJson(res, 500, {
+          error: 'Categories cannot be saved permanently: Supabase is missing the app_settings table. Ask your developer to create it.'
+        });
+        return;
+      }
+    } else if (localWriteError) {
+      sendJson(res, 500, { error: `Failed to save categories: ${localWriteError}` });
+      return;
+    }
+
     sendJson(res, 200, appSettings);
     return;
   }
@@ -916,6 +1007,21 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname.startsWith('/settings/')) {
     const relativePath = url.pathname.replace(/^\/settings\//, '');
     const filePath = path.join(settingsDir, relativePath);
+
+    if (relativePath === 'app_settings.json' && supabase) {
+      try {
+        const formOverrides = await getFormSettingsFromSupabase();
+        if (formOverrides) {
+          const baseSettings = readJsonFile(filePath, {});
+          const merged = { ...baseSettings, form: { ...(baseSettings.form || {}), ...formOverrides } };
+          sendJson(res, 200, merged);
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to read form settings from Supabase; serving local file.', error.message);
+      }
+    }
+
     sendFile(res, filePath);
     return;
   }
