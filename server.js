@@ -727,15 +727,27 @@ const server = http.createServer(async (req, res) => {
       functions: sanitizeFunctionCodes(driver?.functions)
     }));
 
-    fs.mkdirSync(path.dirname(driversFile), { recursive: true });
-    fs.writeFileSync(driversFile, JSON.stringify(sanitized, null, 2));
+    // Local file cache is best-effort; the packaged data dir is read-only on Vercel.
+    try {
+      fs.mkdirSync(path.dirname(driversFile), { recursive: true });
+      fs.writeFileSync(driversFile, JSON.stringify(sanitized, null, 2));
+    } catch (error) {
+      console.error('Failed to write local drivers cache (filesystem may be read-only).', error.message);
+    }
 
+    let supabaseError = null;
     if (supabase) {
       try {
         await upsertDriversToSupabase(sanitized);
       } catch (error) {
-        console.error('Failed to upsert drivers to Supabase. Local copy saved.', error.message);
+        supabaseError = error.message;
+        console.error('Failed to upsert drivers to Supabase.', error.message);
       }
+    }
+
+    if (supabase && supabaseError) {
+      sendJson(res, 500, { error: `Failed to save drivers to Supabase: ${supabaseError}` });
+      return;
     }
 
     sendJson(res, 200, sanitized);
