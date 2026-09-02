@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">ScanHive Icon</title>
+  <desc id="desc">Dark rounded app icon with yellow hive emblem, scanner motif and flying bee accent</desc>
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#262626" />
+      <stop offset="1" stop-color="#0f0f0f" />
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd042" />
+      <stop offset="1" stop-color="#f7a800" />
+    </linearGradient>
+    <linearGradient id="amberDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8ba18" />
+      <stop offset="1" stop-color="#d68e00" />
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="1" stop-color="#d9d9d9" stop-opacity="0.7" />
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <rect x="36" y="36" width="952" height="952" rx="122" fill="url(#bgGrad)" />
+  <rect x="36" y="36" width="952" height="952" rx="122" fill="none" stroke="#3b3b3b" stroke-width="4" />
+
+  <g filter="url(#shadow)">
+    <path d="M260 270 512 130l252 140v280L512 690 260 550Z" fill="#161616" stroke="url(#amber)" stroke-width="22" stroke-linejoin="round" />
+
+    <path d="M362 420 512 336l150 84v168L512 672 362 588Z" fill="url(#amber)" stroke="#f6bf2d" stroke-width="8" stroke-linejoin="round" />
+
+    <rect x="210" y="410" width="180" height="24" rx="12" fill="url(#amber)" />
+    <rect x="170" y="456" width="200" height="24" rx="12" fill="url(#amber)" />
+    <rect x="240" y="502" width="160" height="24" rx="12" fill="url(#amberDark)" />
+
+    <path d="M446 474a18 18 0 0 0-18 18v18a18 18 0 0 0 18 18" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" />
+    <path d="M578 474a18 18 0 0 1 18 18v18a18 18 0 0 1-18 18" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" />
+    <rect x="470" y="500" width="84" height="14" rx="7" fill="#fff" />
+
+    <g transform="translate(635 285) rotate(28)">
+      <ellipse cx="40" cy="18" rx="44" ry="22" fill="url(#wing)" />
+      <ellipse cx="86" cy="12" rx="38" ry="18" fill="url(#wing)" />
+      <ellipse cx="38" cy="74" rx="44" ry="34" fill="#111" />
+      <ellipse cx="78" cy="86" rx="82" ry="56" fill="url(#amber)" />
+      <rect x="20" y="62" width="24" height="48" rx="12" fill="#111" />
+      <rect x="58" y="56" width="24" height="58" rx="12" fill="#111" />
+      <rect x="98" y="62" width="24" height="48" rx="12" fill="#111" />
+      <path d="M24 50q16-28 42-18" fill="none" stroke="#111" stroke-width="8" stroke-linecap="round" />
+      <circle cx="16" cy="34" r="8" fill="#111" />
+    </g>
+  </g>
+</svg>

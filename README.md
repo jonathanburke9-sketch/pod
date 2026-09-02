@@ -328,22 +328,62 @@ Suggested Power Automate request body:
 
 ```json
 {
+	"functionCode": "receipt-sb",
+	"functionLabel": "Receipt-SB",
+	"functionFolder": "Receipt-SB",
 	"driverId": "driver-002",
 	"driverName": "Deon",
 	"folder": "Deon",
-	"invoiceNumber": "INV-1042",
-	"paymentMethod": "EFT",
-	"notes": "Delivered to reception",
+	"invoiceNumber": "Vendor ABC",
+	"paymentMethod": "Card",
+	"notes": "",
 	"timestamp": "2026-07-21T08:30:12.000Z",
-	"filename": "INV-1042_20260721-083012.pdf",
-	"relativePath": "POD_Uploads/Deon/2026/07/INV-1042_20260721-083012.pdf",
+	"filename": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+	"targetFolder": "POD_Uploads",
+	"targetFileName": "RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
+	"createFolder": false,
+	"fixedFolderOnly": true,
+	"renameOnly": true,
+	"relativePath": "POD_Uploads/Deon/Receipt-SB/2026/07/RECSB-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
 	"year": "2026",
 	"month": "07",
 	"scanCount": 1,
 	"qualityWarnings": [],
+	"extraFields": {
+		"totalAmount": "1200.50",
+		"vatAmount": "180.08",
+		"category": "Ingredients"
+	},
+	"excel": {
+		"enabled": true,
+		"tableName": "Receipt_SB",
+		"row": {
+			"vendorName": "Vendor ABC",
+			"paymentMethod": "Card",
+			"totalAmount": "1200.50",
+			"vatAmount": "180.08",
+			"category": "Ingredients",
+			"receiptType": "Receipt-SB",
+			"timestamp": "2026-07-21T08:30:12.000Z",
+			"driverName": "Deon",
+			"driverId": "driver-002"
+		}
+	},
 	"pdfBase64": "JVBERi0xLjQK..."
 }
 ```
+
+Power Automate payload highlights:
+
+- Always for all 4 functions: `functionCode`, `functionLabel`, `functionFolder`, `targetFolder`, `targetFileName`, `createFolder`, `fixedFolderOnly`, `renameOnly`, `relativePath`.
+- Receipt-only Excel fields: `excel.enabled`, `excel.tableName`, `excel.row`.
+- Receipt row keys: `vendorName`, `paymentMethod` (Card or Cash), `totalAmount`, `vatAmount`, `category`, `receiptType`, `timestamp`, `driverName`, `driverId`.
+
+Receipt Excel flow tip:
+
+1. Branch on `excel.enabled` in the flow.
+2. When true, insert `excel.row` into the table from `excel.tableName` (`Receipt_SB` or `Receipt_Just`).
+3. When false, skip the Excel step for POD functions.
 
 Exact contract reference:
 

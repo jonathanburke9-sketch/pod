@@ -26,12 +26,46 @@ const powerAutomateUrl = process.env.POWER_AUTOMATE_URL || '';
 const powerAutomateSharedSecret = process.env.POWER_AUTOMATE_SHARED_SECRET || '';
 const powerAutomateTargetFolder = String(process.env.POWER_AUTOMATE_TARGET_FOLDER || '').trim();
 const powerAutomateFixedFolderOnly = String(process.env.POWER_AUTOMATE_FIXED_FOLDER_ONLY || 'true').toLowerCase() !== 'false';
+const powerAutomateDefaultInboxFolder = `${String(oneDrivePodRoot || 'POD_Uploads').trim().replace(/[\\/]+$/, '')}/Inbox`;
 const isVercelRuntime = Boolean(process.env.VERCEL);
 const uploadMirrorMode = process.env.UPLOAD_MIRROR_MODE
   || (isVercelRuntime ? 'power-automate' : (powerAutomateUrl ? 'power-automate' : 'filesystem'));
 const powerAutomateConfigError = uploadMirrorMode === 'power-automate' && !powerAutomateUrl
   ? 'UPLOAD_MIRROR_MODE is power-automate but POWER_AUTOMATE_URL is missing.'
   : '';
+
+const functionConfigs = {
+  'pod-sb': {
+    code: 'pod-sb',
+    label: 'Sugarberry POD',
+    folderSuffix: 'POD-SB',
+    filenamePrefix: 'PODSB',
+    excelTableName: ''
+  },
+  'pod-just': {
+    code: 'pod-just',
+    label: 'Just POD',
+    folderSuffix: 'POD-Just',
+    filenamePrefix: 'JUSPOD',
+    excelTableName: ''
+  },
+  'receipt-sb': {
+    code: 'receipt-sb',
+    label: 'Sugarberry Receipts',
+    folderSuffix: 'Receipt-SB',
+    filenamePrefix: 'SBR-',
+    excelTableName: 'Receipt_SB'
+  },
+  'receipt-just': {
+    code: 'receipt-just',
+    label: 'Just Receipts',
+    folderSuffix: 'Receipt-Just',
+    filenamePrefix: 'JUSR-',
+    excelTableName: 'Receipt_Just'
+  }
+};
+
+const defaultFunctionCodes = Object.keys(functionConfigs);
 
 console.log(`Upload mirror mode: ${uploadMirrorMode}`);
 console.log(`Power Automate configured: ${Boolean(powerAutomateUrl)}`);
@@ -50,12 +84,56 @@ if (hasSupabaseConfig) {
 }
 
 const fallbackDrivers = [
-  { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin' },
-  { id: 'driver-002', name: 'Deon', folder: 'Deon' },
-  { id: 'driver-003', name: 'Themba', folder: 'Themba' },
-  { id: 'driver-004', name: 'Janine', folder: 'Janine' },
-  { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
+  {
+    id: 'driver-001',
+    name: 'Jonathan (Admin)',
+    folder: 'Jonathan-Admin',
+    functions: defaultFunctionCodes
+  },
+  {
+    id: 'driver-002',
+    name: 'Deon',
+    folder: 'Deon',
+    functions: ['pod-sb', 'receipt-sb']
+  },
+  {
+    id: 'driver-003',
+    name: 'Themba',
+    folder: 'Themba',
+    functions: ['pod-sb', 'pod-just']
+  },
+  {
+    id: 'driver-004',
+    name: 'Janine',
+    folder: 'Janine',
+    functions: ['receipt-sb', 'receipt-just']
+  },
+  {
+    id: 'driver-005',
+    name: 'Wilna',
+    folder: 'Wilna',
+    functions: defaultFunctionCodes
+  }
 ];
+
+function sanitizeFunctionCodes(values) {
+  if (!Array.isArray(values)) return [...defaultFunctionCodes];
+
+  const valid = values
+    .map(value => String(value || '').trim().toLowerCase())
+    .filter(code => defaultFunctionCodes.includes(code));
+
+  if (!valid.length) {
+    return [...defaultFunctionCodes];
+  }
+
+  return [...new Set(valid)];
+}
+
+function getFunctionConfig(functionCode) {
+  const normalized = String(functionCode || '').trim().toLowerCase();
+  return functionConfigs[normalized] || functionConfigs['pod-sb'];
+}
 
 function canWriteToDirectory(dirPath) {
   try {
@@ -134,6 +212,14 @@ function readJsonArrayFile(filePath) {
   return Array.isArray(value) ? value : [];
 }
 
+function readAppSettings() {
+  const settingsPath = path.join(settingsDir, 'app_settings.json');
+  return {
+    path: settingsPath,
+    value: readJsonFile(settingsPath, {})
+  };
+}
+
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     const configuredMaxMb = Number(process.env.UPLOAD_MAX_MB || '50');
@@ -178,6 +264,11 @@ function isAuthorizedAdmin(req) {
 async function getDriversFromSupabase() {
   if (!supabase) return null;
 
+  const localDrivers = readJsonFile(driversFile, fallbackDrivers);
+  const localById = new Map(
+    (Array.isArray(localDrivers) ? localDrivers : []).map(driver => [driver.id, driver])
+  );
+
   const { data, error } = await supabase
     .from('drivers')
     .select('id, name, folder, active')
@@ -191,7 +282,8 @@ async function getDriversFromSupabase() {
   return (data || []).map(driver => ({
     id: driver.id,
     name: driver.name,
-    folder: driver.folder
+    folder: driver.folder,
+    functions: sanitizeFunctionCodes(localById.get(driver.id)?.functions)
   }));
 }
 
@@ -259,14 +351,23 @@ async function getDriversWithFallback() {
   try {
     const supabaseDrivers = await getDriversFromSupabase();
     if (supabaseDrivers && supabaseDrivers.length) {
-      return supabaseDrivers;
+      return supabaseDrivers.map(driver => ({
+        ...driver,
+        functions: sanitizeFunctionCodes(driver.functions)
+      }));
     }
   } catch (error) {
     console.error('Failed to read drivers from Supabase. Using local fallback.', error.message);
   }
 
   const localDrivers = readJsonFile(driversFile, fallbackDrivers);
-  return Array.isArray(localDrivers) ? localDrivers : fallbackDrivers;
+  const source = Array.isArray(localDrivers) ? localDrivers : fallbackDrivers;
+  return source.map(driver => ({
+    id: driver.id,
+    name: driver.name,
+    folder: driver.folder,
+    functions: sanitizeFunctionCodes(driver.functions)
+  }));
 }
 
 async function getStorageHealth() {
@@ -360,17 +461,24 @@ function buildTimestampParts(isoTimestamp) {
 }
 
 function buildSubmissionFileMetadata(payload, mappedFolder) {
-  const folderSegment = safePathSegment(mappedFolder || payload.folder || payload.driverName || 'Unmapped');
-  const invoiceSegment = safePathSegment(payload.invoiceNumber || 'INV-unknown');
+  const functionConfig = getFunctionConfig(payload.functionCode);
+  const folderSegments = [
+    mappedFolder || payload.folder || payload.driverName || 'Unmapped',
+    functionConfig.folderSuffix
+  ]
+    .map(part => safePathSegment(part))
+    .filter(Boolean);
+  const invoiceSegment = safePathSegment(payload.invoiceNumber || payload.documentNumber || 'DOC-unknown');
   const timeParts = buildTimestampParts(payload.timestamp);
-  const fallbackFileName = `${invoiceSegment}_${timeParts.stamp}.pdf`;
+  const fallbackFileName = `${functionConfig.filenamePrefix}_${invoiceSegment}_${timeParts.stamp}.pdf`;
   const fileName = sanitizeFileName(payload.filename || fallbackFileName);
-  const relativePath = [oneDrivePodRoot, folderSegment, timeParts.year, timeParts.month, fileName]
+  const relativePath = [oneDrivePodRoot, ...folderSegments, timeParts.year, timeParts.month, fileName]
     .filter(Boolean)
     .join('/');
 
   return {
-    folderSegment,
+    folderSegments,
+    folderSegment: folderSegments.join('/'),
     invoiceSegment,
     timeParts,
     fileName,
@@ -416,7 +524,9 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
   }
 
   const fileMeta = buildSubmissionFileMetadata(payload, mappedFolder);
-  const folderParts = [powerAutomateTargetFolder || oneDrivePodRoot]
+  const functionConfig = getFunctionConfig(payload.functionCode);
+  const isReceiptFunction = functionConfig.code === 'receipt-sb' || functionConfig.code === 'receipt-just';
+  const folderParts = [powerAutomateTargetFolder || powerAutomateDefaultInboxFolder]
     .flatMap(part => String(part || '').split('/'))
     .flatMap(part => part.split('\\'))
     .map(part => part.trim())
@@ -427,6 +537,9 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
   return {
     fileMeta,
     requestPayload: {
+      functionCode: getFunctionConfig(payload.functionCode).code,
+      functionLabel: functionConfig.label,
+      functionFolder: functionConfig.folderSuffix,
       driverId: payload.driverId || '',
       driverName: payload.driverName || '',
       folder: mappedFolder,
@@ -441,10 +554,28 @@ function buildPowerAutomatePayload(payload, mappedFolder) {
       fixedFolderOnly: powerAutomateFixedFolderOnly,
       renameOnly: powerAutomateFixedFolderOnly,
       relativePath: powerAutomateFixedFolderOnly ? fixedRelativePath : fileMeta.relativePath,
+      suggestedFinalRelativePath: fileMeta.relativePath,
+      inboxFolder: targetFolder,
       year: fileMeta.timeParts.year,
       month: fileMeta.timeParts.month,
       scanCount: payload.scanCount || 0,
       qualityWarnings: Array.isArray(payload.qualityWarnings) ? payload.qualityWarnings : [],
+      extraFields: payload.extraFields || {},
+      excel: {
+        enabled: isReceiptFunction,
+        tableName: functionConfig.excelTableName,
+        row: isReceiptFunction ? {
+          vendorName: payload.vendorName || payload.invoiceNumber || '',
+          paymentMethod: payload.paymentMethod || '',
+          totalAmount: payload.totalAmount || payload.extraFields?.totalAmount || '',
+          vatAmount: payload.vatAmount || payload.extraFields?.vatAmount || '',
+          category: payload.category || payload.extraFields?.category || '',
+          receiptType: functionConfig.label,
+          timestamp: payload.timestamp || new Date().toISOString(),
+          driverName: payload.driverName || '',
+          driverId: payload.driverId || ''
+        } : {}
+      },
       pdfBase64: pdfBuffer.toString('base64')
     }
   };
@@ -493,7 +624,7 @@ function writePdfToOneDrive(payload, mappedFolder) {
   if (oneDrivePodRoot) {
     pathSegments.push(oneDrivePodRoot);
   }
-  pathSegments.push(fileMeta.folderSegment, fileMeta.timeParts.year, fileMeta.timeParts.month);
+  pathSegments.push(...fileMeta.folderSegments, fileMeta.timeParts.year, fileMeta.timeParts.month);
   const absoluteDir = path.join(...pathSegments);
   fs.mkdirSync(absoluteDir, { recursive: true });
 
@@ -513,7 +644,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/drivers') {
     const drivers = await getDriversWithFallback();
 
-    sendJson(res, 200, drivers);
+    sendJson(res, 200, drivers.map(driver => ({
+      id: driver.id,
+      name: driver.name,
+      folder: driver.folder,
+      functions: sanitizeFunctionCodes(driver.functions)
+    })));
     return;
   }
 
@@ -587,7 +723,8 @@ const server = http.createServer(async (req, res) => {
       id: (driver && typeof driver.id === 'string' && driver.id.trim()) || `driver-${Date.now()}-${index}`,
       name: (driver && typeof driver.name === 'string' && driver.name.trim()) || `Driver ${index + 1}`,
       folder: (driver && typeof driver.folder === 'string' && driver.folder.trim())
-        || ((driver && typeof driver.name === 'string' && driver.name.trim()) || `Driver-${index + 1}`)
+        || ((driver && typeof driver.name === 'string' && driver.name.trim()) || `Driver-${index + 1}`),
+      functions: sanitizeFunctionCodes(driver?.functions)
     }));
 
     fs.mkdirSync(path.dirname(driversFile), { recursive: true });
@@ -602,6 +739,46 @@ const server = http.createServer(async (req, res) => {
     }
 
     sendJson(res, 200, sanitized);
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/admin/settings/form') {
+    if (!isAuthorizedAdmin(req)) {
+      sendJson(res, 403, { error: 'Admin access required' });
+      return;
+    }
+
+    let payload;
+    try {
+      payload = await parseJsonBody(req);
+    } catch (error) {
+      sendJson(res, 400, { error: 'Invalid JSON payload' });
+      return;
+    }
+
+    const { path: settingsPath, value: appSettings } = readAppSettings();
+    const currentForm = appSettings.form && typeof appSettings.form === 'object' ? appSettings.form : {};
+    const nextForm = { ...currentForm };
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'receiptCategoryOptions')) {
+      const incoming = Array.isArray(payload.receiptCategoryOptions)
+        ? payload.receiptCategoryOptions
+        : [];
+      const sanitized = Array.from(new Set(incoming
+        .map(item => String(item || '').trim())
+        .filter(Boolean)));
+
+      if (!sanitized.length) {
+        sendJson(res, 400, { error: 'receiptCategoryOptions must include at least one category' });
+        return;
+      }
+
+      nextForm.receiptCategoryOptions = sanitized;
+    }
+
+    appSettings.form = nextForm;
+    fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2));
+    sendJson(res, 200, appSettings);
     return;
   }
 
@@ -630,6 +807,16 @@ const server = http.createServer(async (req, res) => {
       const matchedDriver = Array.isArray(drivers)
         ? drivers.find(driver => driver.id === payload.driverId)
         : null;
+      const selectedFunction = getFunctionConfig(payload.functionCode);
+      const allowedFunctions = sanitizeFunctionCodes(matchedDriver?.functions);
+
+      if (!allowedFunctions.includes(selectedFunction.code)) {
+        sendJson(res, 403, {
+          error: `Function ${selectedFunction.label} is not enabled for this staff member.`
+        });
+        return;
+      }
+
       const mappedFolder = (matchedDriver && matchedDriver.folder)
         || payload.folder
         || payload.driverFolder
@@ -637,8 +824,10 @@ const server = http.createServer(async (req, res) => {
         || 'Unmapped';
 
       payload.folder = mappedFolder;
+      payload.functionCode = selectedFunction.code;
+      payload.functionLabel = selectedFunction.label;
 
-      console.log(`Upload received. mirrorMode=${uploadMirrorMode} driver=${payload.driverId || 'unknown'} invoice=${payload.invoiceNumber || 'unknown'}`);
+      console.log(`Upload received. mirrorMode=${uploadMirrorMode} function=${selectedFunction.code} driver=${payload.driverId || 'unknown'} invoice=${payload.invoiceNumber || payload.documentNumber || 'unknown'}`);
 
       let oneDrive = { saved: false, reason: 'Not attempted' };
 

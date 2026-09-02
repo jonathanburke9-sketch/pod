@@ -6,6 +6,7 @@ const invoiceNumberInput = document.getElementById('invoiceNumber');
 const invoiceHint = document.getElementById('invoiceHint');
 const paymentMethodSelect = document.getElementById('paymentMethod');
 const notesInput = document.getElementById('notes');
+const notesField = document.getElementById('notesField');
 const captureBtn = document.getElementById('captureBtn');
 const removeScanBtn = document.getElementById('removeScanBtn');
 const clearScansBtn = document.getElementById('clearScansBtn');
@@ -15,6 +16,7 @@ const edgeCropToggle = document.getElementById('edgeCropToggle');
 const submitBtn = document.getElementById('submitBtn');
 const syncBtn = document.getElementById('syncBtn');
 const video = document.getElementById('cameraPreview');
+const edgeOverlay = document.getElementById('edgeOverlay');
 const captureGuide = document.getElementById('captureGuide');
 const canvas = document.getElementById('canvas');
 const imagePreview = document.getElementById('capturedImage');
@@ -31,6 +33,9 @@ const healthFailedLabel = document.getElementById('healthFailedLabel');
 const healthPendingValue = document.getElementById('healthPendingValue');
 const healthLastSyncValue = document.getElementById('healthLastSyncValue');
 const healthFailedValue = document.getElementById('healthFailedValue');
+const functionBadge = document.getElementById('functionBadge');
+const documentPrefixEl = document.getElementById('documentPrefix');
+const dynamicFieldContainer = document.getElementById('dynamicFieldContainer');
 
 let stream;
 let cameraActive = false;
@@ -42,6 +47,10 @@ let boundDriverId = localStorage.getItem('pod-device-driver') || '';
 let autoEdgeCropEnabled = localStorage.getItem('pod-auto-edge-crop') === '1';
 let settings = null;
 let invoiceRegex = /^INV-\d{4}$/i;
+let activeFunctionCode = 'pod-sb';
+let activeFunctionConfig = null;
+let dynamicFieldInputs = {};
+let cameraStarting = false;
 let health = {
   failedUploads: 0,
   lastSyncAt: ''
@@ -49,6 +58,107 @@ let health = {
 const queueDbName = 'pod-offline-db';
 const queueStoreName = 'queue';
 const queueDbVersion = 1;
+
+const defaultFunctionConfigs = [
+  {
+    code: 'pod-sb',
+    label: 'Sugarberry POD',
+    documentPrefix: 'INV-',
+    documentDisplayPrefix: 'INV-',
+    documentLabel: 'Invoice number',
+    documentPlaceholder: '1042',
+    documentPattern: '^\\d+$',
+    documentPatternHint: 'Numbers only. INV- is added automatically.',
+    filenamePrefix: 'PODSB',
+    paymentOptions: ['EFT', 'Cash', 'S2S'],
+    extraFields: []
+  },
+  {
+    code: 'pod-just',
+    label: 'Just POD',
+    documentPrefix: 'INV-',
+    documentDisplayPrefix: 'INV-',
+    documentLabel: 'Invoice number',
+    documentPlaceholder: '1042',
+    documentPattern: '^\\d+$',
+    documentPatternHint: 'Numbers only. INV- is added automatically.',
+    filenamePrefix: 'JUSPOD',
+    paymentOptions: ['EFT', 'Cash', 'S2S'],
+    extraFields: []
+  },
+  {
+    code: 'receipt-sb',
+    label: 'Sugarberry Receipts',
+    documentPrefix: '',
+    documentDisplayPrefix: 'SBR-',
+    documentLabel: 'Vendor name',
+    documentPlaceholder: 'Type vendor name',
+    documentPattern: '^.+$',
+    documentPatternHint: 'Type the vendor name.',
+    documentInputMode: 'text',
+    documentNormalize: 'spaced',
+    filenamePrefix: 'SBR-',
+    extraFields: [
+      {
+        key: 'totalAmount',
+        label: 'Total amount',
+        type: 'number',
+        placeholder: '1200.50',
+        required: true
+      },
+      {
+        key: 'vatAmount',
+        label: 'VAT amount',
+        type: 'number',
+        placeholder: '180.08',
+        required: true
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'select',
+        optionsSource: 'receiptCategoryOptions',
+        required: true
+      }
+    ]
+  },
+  {
+    code: 'receipt-just',
+    label: 'Just Receipts',
+    documentPrefix: '',
+    documentDisplayPrefix: 'JUSR-',
+    documentLabel: 'Vendor name',
+    documentPlaceholder: 'Type vendor name',
+    documentPattern: '^.+$',
+    documentPatternHint: 'Type the vendor name.',
+    documentInputMode: 'text',
+    documentNormalize: 'spaced',
+    filenamePrefix: 'JUSR-',
+    extraFields: [
+      {
+        key: 'totalAmount',
+        label: 'Total amount',
+        type: 'number',
+        placeholder: '1200.50',
+        required: true
+      },
+      {
+        key: 'vatAmount',
+        label: 'VAT amount',
+        type: 'number',
+        placeholder: '180.08',
+        required: true
+      },
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'select',
+        optionsSource: 'receiptCategoryOptions',
+        required: true
+      }
+    ]
+  }
+];
 
 function openQueueDb() {
   return new Promise((resolve, reject) => {
@@ -112,6 +222,10 @@ function getActiveTheme(settingsObj) {
 function applyTheme(theme) {
   const root = document.documentElement;
   root.style.setProperty('--bg', theme.bg);
+  root.style.setProperty('--bg-spot-1', theme.bgSpot1 || 'rgba(226, 31, 43, 0.28)');
+  root.style.setProperty('--bg-spot-2', theme.bgSpot2 || 'rgba(217, 31, 111, 0.26)');
+  root.style.setProperty('--bg-spot-3', theme.bgSpot3 || 'rgba(146, 204, 56, 0.2)');
+  root.style.setProperty('--bg-spot-4', theme.bgSpot4 || 'rgba(0, 119, 200, 0.22)');
   root.style.setProperty('--panel', theme.panel);
   root.style.setProperty('--accent', theme.accent);
   root.style.setProperty('--accent-2', theme.accent2);
@@ -123,6 +237,131 @@ function applyTheme(theme) {
   root.style.setProperty('--form-bg', theme.formBg);
   root.style.setProperty('--form-text', theme.formText);
   root.style.setProperty('--secondary-button-bg', theme.secondaryButtonBg);
+}
+
+function getFunctionDefinitions() {
+  const configured = Array.isArray(settings?.functions) ? settings.functions : [];
+  const source = configured.length ? configured : defaultFunctionConfigs;
+  return source.map(item => ({
+    ...item,
+    code: String(item.code || '').trim().toLowerCase()
+  })).filter(item => item.code);
+}
+
+function resolveRequestedFunctionCode() {
+  const queryValue = new URLSearchParams(window.location.search).get('fn');
+  const localValue = localStorage.getItem('pod-selected-function');
+  return String(queryValue || localValue || 'pod-sb').trim().toLowerCase();
+}
+
+function getFunctionConfig(code) {
+  const definitions = getFunctionDefinitions();
+  const found = definitions.find(item => item.code === code);
+  if (found) return found;
+  return definitions[0] || defaultFunctionConfigs[0];
+}
+
+function applyFunctionThemeClass(code) {
+  const classes = ['function-pod-sb', 'function-pod-just', 'function-receipt-sb', 'function-receipt-just'];
+  document.body.classList.remove(...classes);
+  document.body.classList.add(`function-${code}`);
+}
+
+function renderDynamicFields() {
+  dynamicFieldInputs = {};
+  if (!dynamicFieldContainer) return;
+
+  dynamicFieldContainer.innerHTML = '';
+  const fields = Array.isArray(activeFunctionConfig?.extraFields) ? activeFunctionConfig.extraFields : [];
+  fields.forEach(field => {
+    const key = String(field.key || '').trim();
+    if (!key) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'field';
+
+    const label = document.createElement('label');
+    label.textContent = field.label || key;
+
+    let input;
+    if (field.type === 'select') {
+      input = document.createElement('select');
+      const optionValues = Array.isArray(field.options)
+        ? field.options
+        : (Array.isArray(settings?.form?.[field.optionsSource]) ? settings.form[field.optionsSource] : []);
+      optionValues.forEach(optionValue => {
+        const option = document.createElement('option');
+        option.value = optionValue;
+        option.textContent = optionValue;
+        input.appendChild(option);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = field.type || 'text';
+      input.placeholder = field.placeholder || '';
+    }
+    input.dataset.fieldKey = key;
+    if (field.required) {
+      input.setAttribute('required', 'required');
+    }
+
+    wrapper.appendChild(label);
+    wrapper.appendChild(input);
+    dynamicFieldContainer.appendChild(wrapper);
+    dynamicFieldInputs[key] = input;
+  });
+}
+
+function applyFunctionUi() {
+  if (!activeFunctionConfig) return;
+  applyFunctionThemeClass(activeFunctionConfig.code);
+
+  const baseTheme = getActiveTheme(settings);
+  const functionTheme = activeFunctionConfig.theme || {};
+  applyTheme({
+    ...baseTheme,
+    ...functionTheme
+  });
+
+  const label = activeFunctionConfig.label || activeFunctionConfig.code;
+  const functionDescription = activeFunctionConfig.captureDescription
+    || activeFunctionConfig.cardHint
+    || settings?.ui?.subtitle
+    || '';
+  const appTitleEl = document.getElementById('appTitle');
+  const subtitleEl = document.getElementById('subtitle');
+
+  if (appTitleEl) {
+    appTitleEl.textContent = label;
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = functionDescription;
+    subtitleEl.classList.toggle('hidden', !String(functionDescription).trim());
+  }
+
+  if (functionBadge) {
+    functionBadge.textContent = `Function: ${label}`;
+  }
+
+  if (documentPrefixEl) {
+    const displayPrefix = activeFunctionConfig.documentDisplayPrefix
+      ?? activeFunctionConfig.documentPrefix
+      ?? 'INV-';
+    documentPrefixEl.textContent = displayPrefix;
+  }
+
+  const documentLabel = activeFunctionConfig.documentLabel || settings?.ui?.invoiceLabel || 'Document number';
+  document.getElementById('invoiceLabel').textContent = documentLabel;
+  invoiceNumberInput.placeholder = activeFunctionConfig.documentPlaceholder || settings?.ui?.invoicePlaceholder || '1042';
+  invoiceNumberInput.inputMode = activeFunctionConfig.documentInputMode || 'numeric';
+  invoiceHint.textContent = activeFunctionConfig.documentPatternHint || settings?.ui?.invoicePatternHint || 'Numbers only.';
+
+  if (notesField) {
+    const isReceiptFunction = String(activeFunctionConfig.code || '').startsWith('receipt-');
+    notesField.classList.toggle('hidden', isReceiptFunction);
+  }
+
+  renderDynamicFields();
 }
 
 function applyUiSettings(ui) {
@@ -152,8 +391,11 @@ function applyUiSettings(ui) {
 }
 
 function applyPaymentOptions(form) {
+  const options = Array.isArray(activeFunctionConfig?.paymentOptions) && activeFunctionConfig.paymentOptions.length
+    ? activeFunctionConfig.paymentOptions
+    : form.paymentOptions;
   paymentMethodSelect.innerHTML = '';
-  form.paymentOptions.forEach(optionValue => {
+  options.forEach(optionValue => {
     const option = document.createElement('option');
     option.value = optionValue;
     option.textContent = optionValue;
@@ -162,8 +404,9 @@ function applyPaymentOptions(form) {
 }
 
 function setupValidation(form) {
+  const patternSource = activeFunctionConfig?.documentPattern || form.invoicePattern || '^\\d+$';
   try {
-    invoiceRegex = new RegExp(form.invoicePattern || '^\\d+$', form.invoicePatternFlags || '');
+    invoiceRegex = new RegExp(patternSource, form.invoicePatternFlags || '');
   } catch (error) {
     invoiceRegex = /^\d+$/;
   }
@@ -202,8 +445,12 @@ function setAutoEdgeCropEnabled(enabled) {
 async function loadSettings() {
   const response = await fetch('/settings/app_settings.json');
   settings = await response.json();
+  activeFunctionCode = resolveRequestedFunctionCode();
+  activeFunctionConfig = getFunctionConfig(activeFunctionCode);
+  localStorage.setItem('pod-selected-function', activeFunctionConfig.code);
   applyTheme(getActiveTheme(settings));
   applyUiSettings(settings.ui);
+  applyFunctionUi();
   applyPaymentOptions(settings.form);
   setupValidation(settings.form);
   setAutoEdgeCropEnabled(autoEdgeCropEnabled);
@@ -241,23 +488,35 @@ function renderDriverState() {
   if (adminNav) {
     adminNav.classList.toggle('hidden', !isAdminDevice);
   }
+
+  if (boundDriver && activeFunctionConfig) {
+    const allowed = Array.isArray(boundDriver.functions) && boundDriver.functions.length
+      ? boundDriver.functions.map(value => String(value || '').toLowerCase()).includes(activeFunctionConfig.code)
+      : true;
+    if (!allowed) {
+      statusEl.textContent = `${activeFunctionConfig.label} is disabled for this staff member. Go back and choose another function.`;
+    }
+  }
 }
 
 function loadDrivers() {
   return fetch('/api/drivers')
     .then(res => res.json())
     .then(items => {
-      drivers = items;
+      drivers = (Array.isArray(items) ? items : []).map(item => ({
+        ...item,
+        functions: Array.isArray(item.functions) ? item.functions : []
+      }));
       renderDriverOptions();
       renderDriverState();
     })
     .catch(() => {
       drivers = [
-        { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin' },
-        { id: 'driver-002', name: 'Deon', folder: 'Deon' },
-        { id: 'driver-003', name: 'Themba', folder: 'Themba' },
-        { id: 'driver-004', name: 'Janine', folder: 'Janine' },
-        { id: 'driver-005', name: 'Wilna', folder: 'Wilna' }
+        { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin', functions: ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'] },
+        { id: 'driver-002', name: 'Deon', folder: 'Deon', functions: ['pod-sb', 'receipt-sb'] },
+        { id: 'driver-003', name: 'Themba', folder: 'Themba', functions: ['pod-sb', 'pod-just'] },
+        { id: 'driver-004', name: 'Janine', folder: 'Janine', functions: ['receipt-sb', 'receipt-just'] },
+        { id: 'driver-005', name: 'Wilna', folder: 'Wilna', functions: ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'] }
       ];
       renderDriverOptions();
       renderDriverState();
@@ -284,8 +543,22 @@ function bindDriverToDevice() {
 }
 
 async function startCamera(forceRestart = false) {
+  if (cameraStarting) {
+    return;
+  }
+
   if (cameraActive && stream && !forceRestart) {
     return;
+  }
+
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    statusEl.textContent = 'Camera is not supported on this device/browser.';
+    return;
+  }
+
+  cameraStarting = true;
+  if (openCameraBtn) {
+    openCameraBtn.disabled = true;
   }
 
   if (stream) {
@@ -293,11 +566,13 @@ async function startCamera(forceRestart = false) {
   }
 
   try {
+    statusEl.textContent = 'Opening camera. Allow permission if prompted.';
     stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: currentFacingMode },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+        frameRate: { ideal: 24, max: 30 }
       },
       audio: false
     });
@@ -305,10 +580,15 @@ async function startCamera(forceRestart = false) {
     await video.play();
     await enableCameraAutoFocus(stream);
     updateCameraUiState(true);
-    statusEl.textContent = 'Camera ready. Frame the invoice in the corner guides and capture.';
+    statusEl.textContent = 'Camera ready. Frame the invoice in the guides and capture.';
   } catch (error) {
     updateCameraUiState(false);
     statusEl.textContent = 'Camera access is blocked. Please allow camera access.';
+  } finally {
+    cameraStarting = false;
+    if (openCameraBtn) {
+      openCameraBtn.disabled = false;
+    }
   }
 }
 
@@ -354,6 +634,9 @@ function updateCameraUiState(isActive) {
   }
   if (captureGuide) {
     captureGuide.classList.toggle('hidden', !isActive);
+  }
+  if (edgeOverlay) {
+    edgeOverlay.classList.toggle('hidden', !isActive);
   }
   if (openCameraBtn) {
     openCameraBtn.textContent = isActive ? 'Close camera' : 'Open camera';
@@ -569,8 +852,8 @@ function enhanceColorScan(imageData) {
 }
 
 function optimizeScanCanvas(sourceCanvas) {
-  const maxSide = settings?.form?.maxScanSidePx || 1500;
-  const jpegQuality = settings?.form?.jpegQuality || 0.78;
+  const maxSide = settings?.form?.maxScanSidePx || 2200;
+  const jpegQuality = settings?.form?.jpegQuality || 0.9;
   const sourceWidth = sourceCanvas.width;
   const sourceHeight = sourceCanvas.height;
   const longestSide = Math.max(sourceWidth, sourceHeight) || 1;
@@ -586,6 +869,8 @@ function optimizeScanCanvas(sourceCanvas) {
   optimizedCanvas.width = targetWidth;
   optimizedCanvas.height = targetHeight;
   const optimizedContext = optimizedCanvas.getContext('2d');
+  optimizedContext.imageSmoothingEnabled = true;
+  optimizedContext.imageSmoothingQuality = 'high';
   optimizedContext.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight);
   return optimizedCanvas.toDataURL('image/jpeg', jpegQuality);
 }
@@ -594,6 +879,8 @@ function processScanFromCurrentFrame(useEdgeCrop) {
   const context = canvas.getContext('2d');
   canvas.width = video.videoWidth || 1200;
   canvas.height = video.videoHeight || 800;
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
   let detectedBounds = null;
@@ -654,13 +941,14 @@ function processScanFromCurrentFrame(useEdgeCrop) {
   };
 }
 
-function captureInvoice() {
+async function captureInvoice(isAutoCapture = false) {
   if (!cameraActive || !stream || video.readyState < 2) {
     statusEl.textContent = 'Open camera first, then capture the scan.';
     return;
   }
 
   const result = processScanFromCurrentFrame(autoEdgeCropEnabled);
+
   capturedScans.push(result);
   imagePreview.src = result.dataUrl;
   imagePreview.classList.remove('hidden');
@@ -678,8 +966,8 @@ function captureInvoice() {
     statusEl.textContent = 'Color scan captured in full-frame mode. Add more scans if needed, then save to the queue as a PDF.';
   } else {
     statusEl.textContent = result.edgeDetected
-      ? 'Color scan captured with edge detection. Add more scans if needed, then save to the queue as a PDF.'
-      : 'Color scan captured. Edge not confidently detected, so the full frame was kept. Add more scans if needed, then save to the queue as a PDF.';
+      ? `${isAutoCapture ? 'Auto-captured' : 'Captured'} enhanced scan with edge detection. Add more scans if needed, then save to the queue as a PDF.`
+      : `${isAutoCapture ? 'Auto-captured' : 'Captured'} enhanced scan without reliable edge lock. Add more scans if needed, then save to the queue as a PDF.`;
   }
 }
 
@@ -981,7 +1269,13 @@ function fileNameFromEntry(entry) {
   const d = new Date(entry.timestamp);
   const dateToken = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
   const timeToken = `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`;
-  return `${entry.invoiceNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
+  const functionPrefix = entry.filenamePrefix
+    ? String(entry.filenamePrefix)
+    : (entry.functionCode ? String(entry.functionCode).toUpperCase() : 'POD');
+  const documentNumber = entry.invoiceNumber || entry.documentNumber || 'DOC-UNKNOWN';
+  const prefixNeedsSeparator = functionPrefix && !/[-_]$/.test(functionPrefix);
+  const prefixPart = `${functionPrefix}${prefixNeedsSeparator ? '-' : ''}`;
+  return `${prefixPart}${documentNumber}-${dateToken}-${timeToken}-${entry.driverName}-${entry.paymentMethod}.pdf`.replace(/\s+/g, '-');
 }
 
 function refreshQueueCount() {
@@ -1025,7 +1319,13 @@ function isInvoiceValid(invoiceNumber) {
 }
 
 function normalizeInvoiceNumber(rawValue) {
-  return rawValue.trim().replace(/^inv-?/i, '').replace(/\s+/g, '');
+  const normalizeMode = String(activeFunctionConfig?.documentNormalize || '').toLowerCase();
+  const cleanedValue = normalizeMode === 'spaced'
+    ? String(rawValue || '').trim().replace(/\s+/g, ' ')
+    : String(rawValue || '').trim().replace(/\s+/g, '');
+  const prefix = String(activeFunctionConfig?.documentPrefix || '').replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const prefixPattern = prefix ? new RegExp(`^${prefix}`, 'i') : null;
+  return prefixPattern ? cleanedValue.replace(prefixPattern, '') : cleanedValue;
 }
 
 async function enqueueEntry() {
@@ -1035,17 +1335,40 @@ async function enqueueEntry() {
     return;
   }
 
-  if (!capturedScans.length || !invoiceNumberInput.value.trim()) {
-    statusEl.textContent = 'Capture at least one scan and add an invoice number before saving.';
+  const allowedFunctions = Array.isArray(selectedDriver.functions) && selectedDriver.functions.length
+    ? selectedDriver.functions.map(value => String(value || '').toLowerCase())
+    : [];
+  if (allowedFunctions.length && !allowedFunctions.includes(activeFunctionConfig.code)) {
+    statusEl.textContent = `${activeFunctionConfig.label} is disabled for this staff member.`;
     return;
   }
 
-  const invoiceDigits = normalizeInvoiceNumber(invoiceNumberInput.value);
-  if (!isInvoiceValid(invoiceDigits)) {
-    statusEl.textContent = 'Invoice number must contain digits only.';
+  if (!capturedScans.length || !invoiceNumberInput.value.trim()) {
+    statusEl.textContent = 'Capture at least one scan and complete the required document field before saving.';
     return;
   }
-  const invoiceNumber = `INV-${invoiceDigits}`;
+
+  const normalizedDocumentValue = normalizeInvoiceNumber(invoiceNumberInput.value);
+  if (!isInvoiceValid(normalizedDocumentValue)) {
+    statusEl.textContent = `${activeFunctionConfig.documentLabel || 'Document field'} is invalid.`;
+    return;
+  }
+  const documentPrefix = activeFunctionConfig.documentPrefix ?? 'INV-';
+  const invoiceNumber = `${documentPrefix}${normalizedDocumentValue}`;
+
+  const extraFields = {};
+  const extraFieldDefs = Array.isArray(activeFunctionConfig.extraFields) ? activeFunctionConfig.extraFields : [];
+  for (const field of extraFieldDefs) {
+    const key = String(field.key || '').trim();
+    if (!key) continue;
+
+    const value = String(dynamicFieldInputs[key]?.value || '').trim();
+    if (field.required && !value) {
+      statusEl.textContent = `${field.label || key} is required for ${activeFunctionConfig.label}.`;
+      return;
+    }
+    extraFields[key] = value;
+  }
 
   let pdfDataUrl = '';
   try {
@@ -1056,16 +1379,24 @@ async function enqueueEntry() {
   }
 
   const combinedWarnings = [...new Set(capturedScans.flatMap(scan => scan.qualityWarnings))];
-  const notes = notesInput.value.trim();
+  const isReceiptFunction = String(activeFunctionConfig.code || '').startsWith('receipt-');
+  const notes = isReceiptFunction ? '' : notesInput.value.trim();
 
   const entry = {
     id: `${Date.now()}`,
     driverId: selectedDriver.id,
     driverName: selectedDriver.name,
     folder: selectedDriver.folder || selectedDriver.name,
+    functionCode: activeFunctionConfig.code,
+    functionLabel: activeFunctionConfig.label,
+    filenamePrefix: activeFunctionConfig.filenamePrefix || '',
+    isReceiptFunction,
     invoiceNumber,
+    documentNumber: invoiceNumber,
+    vendorName: activeFunctionConfig.code.startsWith('receipt-') ? normalizedDocumentValue : '',
     paymentMethod: paymentMethodSelect.value,
     notes,
+    extraFields,
     scanCount: capturedScans.length,
     documentMimeType: 'application/pdf',
     imageData: pdfDataUrl,
@@ -1073,6 +1404,22 @@ async function enqueueEntry() {
     timestamp: new Date().toISOString(),
     filename: ''
   };
+
+  if (entry.isReceiptFunction) {
+    entry.totalAmount = extraFields.totalAmount || '';
+    entry.vatAmount = extraFields.vatAmount || '';
+    entry.category = extraFields.category || '';
+    entry.excelTableRow = {
+      vendorName: entry.vendorName,
+      paymentMethod: entry.paymentMethod,
+      totalAmount: entry.totalAmount,
+      vatAmount: entry.vatAmount,
+      category: entry.category,
+      receiptType: entry.functionLabel,
+      timestamp: entry.timestamp,
+      driverName: entry.driverName
+    };
+  }
   entry.filename = fileNameFromEntry(entry);
   pendingQueue.push(entry);
   await saveQueue();
@@ -1085,7 +1432,13 @@ async function enqueueEntry() {
 
   invoiceNumberInput.value = '';
   notesInput.value = '';
-  paymentMethodSelect.value = settings.form.paymentOptions[0];
+  Object.values(dynamicFieldInputs).forEach(input => {
+    input.value = '';
+  });
+  const defaultPaymentOptions = Array.isArray(activeFunctionConfig?.paymentOptions) && activeFunctionConfig.paymentOptions.length
+    ? activeFunctionConfig.paymentOptions
+    : settings.form.paymentOptions;
+  paymentMethodSelect.value = defaultPaymentOptions[0] || '';
   capturedScans = [];
   refreshScanSummary();
 }
@@ -1151,7 +1504,9 @@ async function syncQueue() {
     : (lastSuccessMessage || 'All deliveries uploaded.');
 }
 
-captureBtn.addEventListener('click', captureInvoice);
+captureBtn.addEventListener('click', () => {
+  captureInvoice(false);
+});
 removeScanBtn.addEventListener('click', removeLastScan);
 clearScansBtn.addEventListener('click', clearScans);
 if (edgeCropToggle) {

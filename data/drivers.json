@@ -2,26 +2,50 @@
   {
     "id": "driver-001",
     "name": "Jonathan (Admin)",
-    "folder": "Jonathan-Admin"
+    "folder": "Jonathan-Admin",
+    "functions": [
+      "pod-sb",
+      "pod-just",
+      "receipt-sb",
+      "receipt-just"
+    ]
   },
   {
     "id": "driver-002",
     "name": "Deon",
-    "folder": "Deon"
+    "folder": "Deon",
+    "functions": [
+      "pod-sb",
+      "receipt-sb"
+    ]
   },
   {
     "id": "driver-003",
     "name": "Themba",
-    "folder": "Themba"
+    "folder": "Themba",
+    "functions": [
+      "pod-sb",
+      "pod-just"
+    ]
   },
   {
     "id": "driver-004",
     "name": "Janine",
-    "folder": "Janine"
+    "folder": "Janine",
+    "functions": [
+      "receipt-sb",
+      "receipt-just"
+    ]
   },
   {
     "id": "driver-005",
     "name": "Wilna",
-    "folder": "Wilna"
+    "folder": "Wilna",
+    "functions": [
+      "pod-sb",
+      "pod-just",
+      "receipt-sb",
+      "receipt-just"
+    ]
   }
 ]

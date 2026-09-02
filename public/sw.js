@@ -1,15 +1,17 @@
-const CACHE_NAME = 'pod-pulse-v5';
+const CACHE_NAME = 'pod-pulse-v8';
 const APP_SHELL = [
   '/',
   '/index.html',
+  '/capture.html',
   '/admin.html',
-  '/css/styles.css?v=20260723',
-  '/js/app.js?v=20260723',
-  '/js/admin.js?v=20260722',
+  '/css/styles.css?v=20260724a',
+  '/js/app.js?v=20260724e',
+  '/js/home.js?v=20260724a',
+  '/js/admin.js?v=20260724a',
   '/settings/app_settings.json',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/scanhive-logo.png',
+  '/icons/scanhive-icon.svg',
   '/icons/apple-touch-icon.png'
 ];
 
@@ -27,7 +29,30 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+
+  const requestUrl = new URL(event.request.url);
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  const isNavigation = event.request.mode === 'navigate';
+
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request).then(cached => cached || caches.match('/index.html')))
+    fetch(event.request).catch(async () => {
+      const cached = await caches.match(event.request);
+      if (cached) {
+        return cached;
+      }
+
+      if (isSameOrigin && requestUrl.pathname === '/capture.html') {
+        const capturePage = await caches.match('/capture.html');
+        if (capturePage) {
+          return capturePage;
+        }
+      }
+
+      if (isNavigation) {
+        return caches.match('/index.html');
+      }
+
+      return Response.error();
+    })
   );
 });
