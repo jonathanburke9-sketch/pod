@@ -16,7 +16,7 @@ const runtimeDataDir = resolveWritableDataDir(
 const settingsDir = path.join(__dirname, 'settings');
 const submissionsFile = path.join(runtimeDataDir, 'submissions.json');
 const driversFile = path.join(packagedDataDir, 'drivers.json');
-const adminKey = process.env.ADMIN_KEY || '';
+const adminKey = String(process.env.ADMIN_KEY || '').trim();
 const hasSupabaseConfig = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 const oneDriveRoot = process.env.ONEDRIVE_ROOT || '';
 const oneDrivePodRoot = process.env.ONEDRIVE_POD_ROOT === undefined
@@ -258,7 +258,7 @@ function parseJsonBody(req) {
 
 function isAuthorizedAdmin(req) {
   if (!adminKey) return false;
-  return req.headers['x-admin-key'] === adminKey;
+  return String(req.headers['x-admin-key'] || '').trim() === adminKey;
 }
 
 async function getDriversFromSupabase() {

@@ -2,6 +2,7 @@ const adminTitle = document.getElementById('adminTitle');
 const adminSubtitle = document.getElementById('adminSubtitle');
 const adminKeyLabel = document.getElementById('adminKeyLabel');
 const adminKeyInput = document.getElementById('adminKey');
+const toggleAdminKeyBtn = document.getElementById('toggleAdminKeyBtn');
 const adminStatus = document.getElementById('adminStatus');
 const driversBody = document.getElementById('driversBody');
 const addDriverBtn = document.getElementById('addDriverBtn');
@@ -246,7 +247,12 @@ async function saveDrivers() {
   });
 
   if (!response.ok) {
-    adminStatus.textContent = 'Save failed. Check admin key.';
+    if (response.status === 403) {
+      adminStatus.textContent = 'Save failed. Admin key is incorrect.';
+    } else {
+      const details = await response.json().catch(() => null);
+      adminStatus.textContent = `Save failed. ${details?.error || `Server error (${response.status}).`}`;
+    }
     return;
   }
 
@@ -301,6 +307,14 @@ removeDriverBtn.addEventListener('click', removeDriver);
 saveDriversBtn.addEventListener('click', saveDrivers);
 if (saveCategoriesBtn) {
   saveCategoriesBtn.addEventListener('click', saveCategories);
+}
+if (toggleAdminKeyBtn) {
+  toggleAdminKeyBtn.addEventListener('click', () => {
+    const isHidden = adminKeyInput.type === 'password';
+    adminKeyInput.type = isHidden ? 'text' : 'password';
+    toggleAdminKeyBtn.textContent = isHidden ? 'Hide' : 'Show';
+    toggleAdminKeyBtn.setAttribute('aria-label', isHidden ? 'Hide admin key' : 'Show admin key');
+  });
 }
 driverSearch.addEventListener('input', renderTable);
 sortOrder.addEventListener('change', renderTable);

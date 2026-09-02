@@ -1,13 +1,13 @@
-const CACHE_NAME = 'pod-pulse-v9';
+const CACHE_NAME = 'pod-pulse-v10';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/capture.html',
   '/admin.html',
-  '/css/styles.css?v=20260724a',
+  '/css/styles.css?v=20260902a',
   '/js/app.js?v=20260724e',
   '/js/home.js?v=20260724a',
-  '/js/admin.js?v=20260902a',
+  '/js/admin.js?v=20260902b',
   '/settings/app_settings.json',
   '/manifest.json',
   '/icons/scanhive-logo.png',

@@ -135,6 +135,21 @@ body {
   gap: 6px;
 }
 
+.admin-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-key-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-key-toggle {
+  flex: 0 0 auto;
+  padding: 12px 16px;
+}
+
 input,
 select,
 button,

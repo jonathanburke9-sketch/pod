@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#d91f6f" />
     <title>Staff Admin</title>
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="/css/styles.css?v=20260724a" />
+    <link rel="stylesheet" href="/css/styles.css?v=20260902a" />
   </head>
   <body>
     <main class="app">
@@ -22,7 +22,10 @@
       <section class="card">
         <div class="field">
           <label id="adminKeyLabel" for="adminKey">Admin key</label>
-          <input id="adminKey" type="password" placeholder="Enter admin key" />
+          <div class="admin-key-row">
+            <input id="adminKey" type="password" placeholder="Enter admin key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
+            <button type="button" id="toggleAdminKeyBtn" class="secondary admin-key-toggle" aria-label="Show admin key">Show</button>
+          </div>
         </div>
         <p class="status" id="adminStatus">Load drivers to begin.</p>
       </section>
@@ -72,6 +75,6 @@
       </section>
     </main>
 
-    <script src="/js/admin.js?v=20260902a"></script>
+    <script src="/js/admin.js?v=20260902b"></script>
   </body>
 </html>
