@@ -25,6 +25,12 @@ const defaultFunctionDefinitions = [
   { code: 'receipt-just', label: 'Receipt-Just' }
 ];
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 function randomId() {
   return `driver-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 }

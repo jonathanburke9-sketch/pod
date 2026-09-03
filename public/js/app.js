@@ -499,6 +499,15 @@ function renderDriverState() {
   }
 }
 
+function getCachedDrivers() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('pod-drivers-cache') || 'null');
+    return Array.isArray(cached) && cached.length ? cached : null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function loadDrivers() {
   return fetch('/api/drivers')
     .then(res => res.json())
@@ -507,11 +516,14 @@ function loadDrivers() {
         ...item,
         functions: Array.isArray(item.functions) ? item.functions : []
       }));
+      if (drivers.length) {
+        localStorage.setItem('pod-drivers-cache', JSON.stringify(drivers));
+      }
       renderDriverOptions();
       renderDriverState();
     })
     .catch(() => {
-      drivers = [
+      drivers = getCachedDrivers() || [
         { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin', functions: ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'] },
         { id: 'driver-002', name: 'Deon', folder: 'Deon', functions: ['pod-sb', 'receipt-sb'] },
         { id: 'driver-003', name: 'Themba', folder: 'Themba', functions: ['pod-sb', 'pod-just'] },

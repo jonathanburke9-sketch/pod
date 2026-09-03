@@ -1,4 +1,5 @@
-const CACHE_NAME = 'pod-pulse-v10';
+const CACHE_NAME = 'pod-pulse-v11';
+const RUNTIME_CACHE_PATHS = [/^\/api\/drivers$/];
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -33,26 +34,35 @@ self.addEventListener('fetch', event => {
   const requestUrl = new URL(event.request.url);
   const isSameOrigin = requestUrl.origin === self.location.origin;
   const isNavigation = event.request.mode === 'navigate';
+  const shouldRuntimeCache = isSameOrigin && RUNTIME_CACHE_PATHS.some(pattern => pattern.test(requestUrl.pathname));
 
   event.respondWith(
-    fetch(event.request).catch(async () => {
-      const cached = await caches.match(event.request);
-      if (cached) {
-        return cached;
-      }
-
-      if (isSameOrigin && requestUrl.pathname === '/capture.html') {
-        const capturePage = await caches.match('/capture.html');
-        if (capturePage) {
-          return capturePage;
+    fetch(event.request)
+      .then(response => {
+        if (shouldRuntimeCache && response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
         }
-      }
+        return response;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request, { ignoreSearch: isSameOrigin });
+        if (cached) {
+          return cached;
+        }
 
-      if (isNavigation) {
-        return caches.match('/index.html');
-      }
+        if (isSameOrigin && requestUrl.pathname === '/capture.html') {
+          const capturePage = await caches.match('/capture.html');
+          if (capturePage) {
+            return capturePage;
+          }
+        }
 
-      return Response.error();
-    })
+        if (isNavigation) {
+          return caches.match('/index.html');
+        }
+
+        return Response.error();
+      })
   );
 });

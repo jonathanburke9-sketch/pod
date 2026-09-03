@@ -41,6 +41,23 @@ function getFallbackFunctions() {
   return ['pod-sb', 'pod-just', 'receipt-sb', 'receipt-just'];
 }
 
+const FALLBACK_STAFF = [
+  { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin', functions: getFallbackFunctions() },
+  { id: 'driver-002', name: 'Deon', folder: 'Deon', functions: ['pod-sb', 'receipt-sb'] },
+  { id: 'driver-003', name: 'Themba', folder: 'Themba', functions: ['pod-sb', 'pod-just'] },
+  { id: 'driver-004', name: 'Janine', folder: 'Janine', functions: ['receipt-sb', 'receipt-just'] },
+  { id: 'driver-005', name: 'Wilna', folder: 'Wilna', functions: getFallbackFunctions() }
+];
+
+function getCachedStaff() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('pod-drivers-cache') || 'null');
+    return Array.isArray(cached) && cached.length ? cached : null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function getBoundStaff() {
   return staffMembers.find(member => member.id === boundStaffId) || null;
 }
@@ -180,10 +197,11 @@ async function loadStaff() {
     const response = await fetch('/api/drivers');
     const items = await response.json();
     staffMembers = Array.isArray(items) ? items : [];
+    if (staffMembers.length) {
+      localStorage.setItem('pod-drivers-cache', JSON.stringify(staffMembers));
+    }
   } catch (error) {
-    staffMembers = [
-      { id: 'driver-001', name: 'Jonathan (Admin)', folder: 'Jonathan-Admin', functions: getFallbackFunctions() }
-    ];
+    staffMembers = getCachedStaff() || FALLBACK_STAFF;
   }
 }
 
@@ -216,6 +234,12 @@ function renderConfiguredFunctionCards() {
 }
 
 bindStaffBtn.addEventListener('click', bindStaffToDevice);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   await loadSettings();
