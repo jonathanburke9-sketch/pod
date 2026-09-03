@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pod-pulse-v11';
+const CACHE_NAME = 'pod-pulse-v12';
 const RUNTIME_CACHE_PATHS = [/^\/api\/drivers$/];
 const APP_SHELL = [
   '/',
@@ -13,7 +13,14 @@ const APP_SHELL = [
   '/manifest.json',
   '/icons/scanhive-logo.png',
   '/icons/scanhive-icon.svg',
-  '/icons/apple-touch-icon.png'
+  '/icons/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/pod-s-truck-exact.png',
+  '/icons/just-pod-logo.png',
+  '/icons/sb-receipt-logo.png',
+  '/icons/just-receipt-logo.png',
+  '/icons/sugarberry-s.png'
 ];
 
 self.addEventListener('install', event => {
