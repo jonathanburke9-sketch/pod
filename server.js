@@ -399,7 +399,15 @@ function isSupabaseInvocationFailure(error) {
   return message.includes('FUNCTION_INVOCATION_FAILED') || code.includes('FUNCTION_INVOCATION_FAILED');
 }
 
-async function getDriversWithFallback() {
+const DRIVERS_CACHE_TTL_MS = Math.max(0, Number(process.env.DRIVERS_CACHE_TTL_MS || '60000'));
+let driversCache = { data: null, expiresAt: 0 };
+let driversCacheInflight = null;
+
+function invalidateDriversCache() {
+  driversCache = { data: null, expiresAt: 0 };
+}
+
+async function fetchDriversUncached() {
   try {
     const supabaseDrivers = await getDriversFromSupabase();
     if (supabaseDrivers && supabaseDrivers.length) {
@@ -420,6 +428,25 @@ async function getDriversWithFallback() {
     folder: driver.folder,
     functions: sanitizeFunctionCodes(driver.functions)
   }));
+}
+
+// Shared across /api/drivers and /api/upload so a batch of uploads reuses one driver-table read instead of one per request.
+async function getDriversWithFallback() {
+  const now = Date.now();
+  if (driversCache.data && driversCache.expiresAt > now) {
+    return driversCache.data;
+  }
+
+  // Coalesce concurrent misses (e.g. a burst of uploads) into a single in-flight query.
+  if (!driversCacheInflight) {
+    driversCacheInflight = fetchDriversUncached().finally(() => {
+      driversCacheInflight = null;
+    });
+  }
+
+  const drivers = await driversCacheInflight;
+  driversCache = { data: drivers, expiresAt: Date.now() + DRIVERS_CACHE_TTL_MS };
+  return drivers;
 }
 
 async function getStorageHealth() {
@@ -802,6 +829,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    invalidateDriversCache();
     sendJson(res, 200, sanitized);
     return;
   }
