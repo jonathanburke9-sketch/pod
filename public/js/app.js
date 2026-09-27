@@ -70,7 +70,7 @@ const defaultFunctionConfigs = [
     documentPattern: '^\\d+$',
     documentPatternHint: 'Numbers only. INV- is added automatically.',
     filenamePrefix: 'PODSB',
-    paymentOptions: ['EFT', 'Cash', 'S2S'],
+    paymentOptions: ['EFT', 'Cash', 'S2S', 'S2S + EFT', 'S2S + Cash'],
     extraFields: []
   },
   {
@@ -83,7 +83,7 @@ const defaultFunctionConfigs = [
     documentPattern: '^\\d+$',
     documentPatternHint: 'Numbers only. INV- is added automatically.',
     filenamePrefix: 'JUSPOD',
-    paymentOptions: ['EFT', 'Cash', 'S2S'],
+    paymentOptions: ['EFT', 'Cash', 'S2S', 'S2S + EFT', 'S2S + Cash'],
     extraFields: []
   },
   {

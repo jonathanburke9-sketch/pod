@@ -407,6 +407,32 @@ function invalidateDriversCache() {
   driversCache = { data: null, expiresAt: 0 };
 }
 
+const SETTINGS_FORM_CACHE_TTL_MS = Math.max(0, Number(process.env.SETTINGS_CACHE_TTL_MS || '300000'));
+let settingsFormCache = { data: null, expiresAt: 0 };
+let settingsFormCacheInflight = null;
+
+function invalidateSettingsFormCache() {
+  settingsFormCache = { data: null, expiresAt: 0 };
+}
+
+// Shared across /settings/app_settings.json requests so page loads don't hit Supabase on every request.
+async function getFormSettingsFromSupabaseCached() {
+  const now = Date.now();
+  if (settingsFormCache.expiresAt > now) {
+    return settingsFormCache.data;
+  }
+
+  if (!settingsFormCacheInflight) {
+    settingsFormCacheInflight = getFormSettingsFromSupabase().finally(() => {
+      settingsFormCacheInflight = null;
+    });
+  }
+
+  const formOverrides = await settingsFormCacheInflight;
+  settingsFormCache = { data: formOverrides, expiresAt: Date.now() + SETTINGS_FORM_CACHE_TTL_MS };
+  return formOverrides;
+}
+
 async function fetchDriversUncached() {
   try {
     const supabaseDrivers = await getDriversFromSupabase();
@@ -853,7 +879,7 @@ const server = http.createServer(async (req, res) => {
 
     if (supabase) {
       try {
-        const supabaseForm = await getFormSettingsFromSupabase();
+        const supabaseForm = await getFormSettingsFromSupabaseCached();
         if (supabaseForm) currentForm = { ...currentForm, ...supabaseForm };
       } catch (error) {
         console.error('Failed to read current form settings from Supabase.', error.message);
@@ -904,6 +930,8 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
+
+      invalidateSettingsFormCache();
     } else if (localWriteError) {
       sendJson(res, 500, { error: `Failed to save categories: ${localWriteError}` });
       return;
@@ -1038,7 +1066,7 @@ const server = http.createServer(async (req, res) => {
 
     if (relativePath === 'app_settings.json' && supabase) {
       try {
-        const formOverrides = await getFormSettingsFromSupabase();
+        const formOverrides = await getFormSettingsFromSupabaseCached();
         if (formOverrides) {
           const baseSettings = readJsonFile(filePath, {});
           const merged = { ...baseSettings, form: { ...(baseSettings.form || {}), ...formOverrides } };

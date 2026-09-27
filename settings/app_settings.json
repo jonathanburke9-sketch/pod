@@ -74,7 +74,9 @@
       "paymentOptions": [
         "EFT",
         "Cash",
-        "S2S"
+        "S2S",
+        "S2S + EFT",
+        "S2S + Cash"
       ],
       "theme": {
         "bg": "#110312",
@@ -115,7 +117,9 @@
       "paymentOptions": [
         "EFT",
         "Cash",
-        "S2S"
+        "S2S",
+        "S2S + EFT",
+        "S2S + Cash"
       ],
       "theme": {
         "bg": "#061621",
