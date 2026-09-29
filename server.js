@@ -361,6 +361,11 @@ async function upsertDriversToSupabase(drivers) {
 async function writeSubmissionToSupabase(payload) {
   if (!supabase) return false;
 
+  const dbPayload = { ...payload };
+  if (uploadMirrorMode === 'power-automate') {
+    delete dbPayload.imageData;
+  }
+
   const row = {
     driver_id: payload.driverId || null,
     driver_name: payload.driverName || '',
@@ -371,7 +376,7 @@ async function writeSubmissionToSupabase(payload) {
     pod_pdf_url: payload.podPdfPath || null,
     status: 'uploaded',
     source_device: payload.sourceDevice || null,
-    payload,
+    payload: dbPayload,
     synced_at: new Date().toISOString()
   };
 
