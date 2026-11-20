@@ -26,7 +26,7 @@ The Power Automate flow should accept this JSON body:
   "folder": "Deon",
   "invoiceNumber": "Vendor ABC",
   "paymentMethod": "Card",
-  "notes": "",
+  "notes": "Urgent delivery; receipt for kitchen supplies.",
   "timestamp": "2026-07-21T08:30:12.000Z",
   "filename": "SBR-Vendor-ABC-2026.07.27-09.30-Deon-Card.pdf",
   "targetFolder": "POD_Uploads/Inbox",
@@ -96,6 +96,8 @@ The expected receipt row fields are:
 - `timestamp`
 - `driverName`
 - `driverId`
+
+Optional receipt notes are sent in the top-level `notes` field and included as a notes page in the PDF. They are separate from the Excel row fields above.
 
 ## Receipt Example for Excel Flow
 

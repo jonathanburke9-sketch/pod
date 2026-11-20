@@ -358,7 +358,10 @@ function applyFunctionUi() {
 
   if (notesField) {
     const isReceiptFunction = String(activeFunctionConfig.code || '').startsWith('receipt-');
-    notesField.classList.toggle('hidden', isReceiptFunction);
+    notesField.classList.remove('hidden');
+    notesInput.placeholder = isReceiptFunction
+      ? 'Optional notes for this receipt submission'
+      : (settings?.ui?.notesPlaceholder || 'Optional notes for this POD submission');
   }
 
   renderDynamicFields();
@@ -1392,7 +1395,7 @@ async function enqueueEntry() {
 
   const combinedWarnings = [...new Set(capturedScans.flatMap(scan => scan.qualityWarnings))];
   const isReceiptFunction = String(activeFunctionConfig.code || '').startsWith('receipt-');
-  const notes = isReceiptFunction ? '' : notesInput.value.trim();
+  const notes = notesInput.value.trim();
 
   const entry = {
     id: `${Date.now()}`,
